@@ -1,17 +1,10 @@
-//
-//  MemoryJournalApp.swift
-//  MemoryJournal
-//
-//  Created by Natan Biley on 12/27/25.
-//
-
 import SwiftUI
-
+import SwiftData
 @main
 struct MemoryJournalApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView().modelContainer(for: [Entry.self])
         }
     }
 }

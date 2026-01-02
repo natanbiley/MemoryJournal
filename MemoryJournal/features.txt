@@ -1,0 +1,7 @@
+year view
+month view
+favorites
+select / delete
+search
+sort
+photos

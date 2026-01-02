@@ -1,24 +1,27 @@
-//
-//  ContentView.swift
-//  MemoryJournal
-//
-//  Created by Natan Biley on 12/27/25.
-//
-
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            Tab("Entries", systemImage: "book") {
+                EntryList()
+            }
+
+
+            Tab("Calendar", systemImage: "calendar") {
+                
+            }
+
+
+            Tab("Settings", systemImage: "gear") {
+                
+            }
         }
-        .padding()
     }
 }
 
 #Preview {
     ContentView()
+        .modelContainer(SampleData.shared.modelContainer)
 }
