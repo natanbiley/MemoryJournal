@@ -4,12 +4,12 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
-            Tab("Entries", systemImage: "book") {
+            Tab("Entries", systemImage: "book.pages") {
                 EntryList()
             }
 
 
-            Tab("Calendar", systemImage: "calendar") {
+            Tab("Insights", systemImage: "calendar") {
                 
             }
 

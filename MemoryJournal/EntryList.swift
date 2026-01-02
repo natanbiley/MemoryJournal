@@ -58,17 +58,35 @@ struct EntryList: View {
                                     Divider()
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(String(entry.bodyText.prefix(70)) + "...").padding(.leading, 5)
-                                        if let photos = entry.photos, !photos.isEmpty {
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "photo.fill")
-                                                    .font(.caption)
-                                                    .foregroundColor(.blue)
-                                                Text("\(photos.count) photo\(photos.count > 1 ? "s" : "")")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
+                                        HStack(spacing: 8) {
+                                            if let photos = entry.photos, !photos.isEmpty {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "photo.fill")
+                                                        .font(.caption)
+                                                        .foregroundColor(.blue)
+                                                    Text("\(photos.count) photo\(photos.count > 1 ? "s" : "")")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
                                             }
-                                            .padding(.leading, 5)
+                                            if let videos = entry.videos, !videos.isEmpty {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "video.fill")
+                                                        .font(.caption)
+                                                        .foregroundColor(.purple)
+                                                    Text("\(videos.count) video\(videos.count > 1 ? "s" : "")")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
                                         }
+                                        .padding(.leading, 5)
+                                    }
+                                    Spacer()
+                                    if entry.isFavorite {
+                                        Image(systemName: "heart.fill")
+                                            .font(.caption)
+                                            .foregroundColor(.red)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,6 +119,25 @@ struct EntryList: View {
                 .searchable(text: $searchText, prompt: "Search entries")
                 .toolbar {
                     if editMode == .active && !selection.isEmpty {
+                        Button {
+                            // Toggle favorite for selected entries
+                            for entryID in selection {
+                                if let entry = context.model(for: entryID) as? Entry {
+                                    entry.isFavorite.toggle()
+                                }
+                            }
+                            // Save the context to persist changes
+                            do {
+                                try context.save()
+                            } catch {
+                                print("Error saving context after favoriting: \(error)")
+                            }
+                        } label: {
+                            Image(systemName: "heart.fill")
+                        }
+                        .foregroundColor(.red)
+                        .buttonStyle(.glass)
+                        
                         Button(role: .destructive) {
                             // Delete selected entries
                             for entryID in selection {
@@ -159,13 +196,13 @@ struct EntryList: View {
                             Image(systemName: "plus")
                                 .font(.title2)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.blue)
+                                .foregroundColor(.white)
                                 .frame(width: 50, height: 60)
                                 .clipShape(Circle())
                         }
                         .padding(.trailing, 20)
                         .padding(.bottom, 20)
-                        .buttonStyle(.glass)
+                        .buttonStyle(.glassProminent)
                     }
                 }
             }

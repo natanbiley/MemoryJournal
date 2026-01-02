@@ -7,12 +7,16 @@ class Entry {
     var bodyHTML: String? // Store rich text as HTML
     var date: Date
     @Attribute(.externalStorage) var photos: [Data]? // Store photo data
+    @Attribute(.externalStorage) var videos: [Data]? // Store video data
+    var isFavorite: Bool = false
 
-    init (bodyText: String, date: Date, bodyHTML: String? = nil, photos: [Data]? = nil) {
+    init (bodyText: String, date: Date, bodyHTML: String? = nil, photos: [Data]? = nil, videos: [Data]? = nil, isFavorite: Bool = false) {
         self.bodyText = bodyText
         self.bodyHTML = bodyHTML
         self.date = date
         self.photos = photos
+        self.videos = videos
+        self.isFavorite = isFavorite
     }
 
     static let sampleEntries = [

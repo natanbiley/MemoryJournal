@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import Combine
 import PhotosUI
+import AVKit
 
 struct EntryEditor: View {
     @Environment(\.modelContext) private var context
@@ -19,6 +20,12 @@ struct EntryEditor: View {
     @State private var showPhotoPicker = false
     @State private var selectedPhotoIndex: Int?
     @State private var showPhotoViewer = false
+    @State private var selectedVideos: [PhotosPickerItem] = []
+    @State private var videoData: [Data] = []
+    @State private var showVideoPicker = false
+    @State private var selectedVideoIndex: Int = 0
+    @State private var showVideoPlayer = false
+    @State private var currentVideoData: VideoDataWrapper?
     
     var body: some View {
         @Bindable var store = store
@@ -98,6 +105,17 @@ struct EntryEditor: View {
                         }
                     }
                 }
+                .photosPicker(isPresented: $showVideoPicker, selection: $selectedVideos, maxSelectionCount: 5, matching: .videos)
+                .onChange(of: selectedVideos) { oldValue, newValue in
+                    Task {
+                        videoData.removeAll()
+                        for item in newValue {
+                            if let data = try? await item.loadTransferable(type: Data.self) {
+                                videoData.append(data)
+                            }
+                        }
+                    }
+                }
             
             // Photo gallery
             if !photoData.isEmpty {
@@ -135,6 +153,56 @@ struct EntryEditor: View {
                 .frame(height: 110)
             }
             
+            // Video gallery
+            if !videoData.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(videoData.enumerated()), id: \.offset) { index, data in
+                            ZStack(alignment: .topTrailing) {
+                                ZStack {
+                                    if let thumbnail = generateThumbnail(from: data) {
+                                        Image(uiImage: thumbnail)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 100, height: 100)
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 100, height: 100)
+                                    }
+                                    
+                                    Image(systemName: "play.circle.fill")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.white)
+                                        .shadow(radius: 3)
+                                }
+                                .onTapGesture {
+                                    print("🎬 Video tapped at index: \(index), total videos: \(videoData.count)")
+                                    selectedVideoIndex = index
+                                    currentVideoData = VideoDataWrapper(data: data)
+                                    print("🎬 Set currentVideoData with \(data.count) bytes")
+                                    showVideoPlayer = true
+                                    print("🎬 showVideoPlayer set to true")
+                                }
+                                
+                                Button(action: {
+                                    videoData.remove(at: index)
+                                    selectedVideos.remove(at: index)
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white)
+                                        .background(Color.black.opacity(0.6).clipShape(Circle()))
+                                }
+                                .padding(4)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .frame(height: 110)
+            }
+            
             Divider()
             
             // Rich Text Editor with toolbar as input accessory
@@ -147,14 +215,24 @@ struct EntryEditor: View {
             .onAppear {
                 loadInitialContent()
             }
+            .onChange(of: store.selectedEntryID) { oldValue, newValue in
+                // Reload content when editing an entry
+                loadInitialContent()
+            }
         }
         .fullScreenCover(isPresented: $showPhotoViewer) {
             PhotoViewerView(photoData: photoData, currentIndex: selectedPhotoIndex ?? 0, isPresented: $showPhotoViewer)
         }
+        .fullScreenCover(item: $currentVideoData) { videoData in
+            VideoPlayerView(videoData: videoData.data, isPresented: Binding(
+                get: { showVideoPlayer },
+                set: { showVideoPlayer = $0; if !$0 { currentVideoData = nil } }
+            ))
+        }
     }
     
     private func createToolbarView() -> UIView {
-        let toolbar = RichTextToolbar(manager: richTextManager, showPhotoPicker: $showPhotoPicker)
+        let toolbar = RichTextToolbar(manager: richTextManager, showPhotoPicker: $showPhotoPicker, showVideoPicker: $showVideoPicker)
         let hostingController = UIHostingController(rootView: toolbar)
         hostingController.view.backgroundColor = UIColor.systemGray6
         
@@ -183,11 +261,15 @@ struct EntryEditor: View {
         // Load existing photos if editing an entry
         if let entryID = store.selectedEntryID {
             let existingEntry = context.model(for: entryID) as? Entry
-            if let existingEntry = existingEntry,
-               let photos = existingEntry.photos {
-                photoData = photos
-                // Cache the images on load
-                cachedImages = photos.compactMap { UIImage(data: $0) }
+            if let existingEntry = existingEntry {
+                if let photos = existingEntry.photos {
+                    photoData = photos
+                    // Cache the images on load
+                    cachedImages = photos.compactMap { UIImage(data: $0) }
+                }
+                if let videos = existingEntry.videos {
+                    videoData = videos
+                }
             }
         }
     }
@@ -216,10 +298,11 @@ struct EntryEditor: View {
                 existingEntry.bodyHTML = htmlString
                 existingEntry.date = date
                 existingEntry.photos = photoData.isEmpty ? nil : photoData
+                existingEntry.videos = videoData.isEmpty ? nil : videoData
             }
         } else {
             // Create new entry
-            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData)
+            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData, videos: videoData.isEmpty ? nil : videoData)
             context.insert(newEntry)
         }
         
@@ -274,6 +357,53 @@ struct EntryEditor: View {
             datesWithEntries = Set(entries.map { calendar.startOfDay(for: $0.date) })
         } catch {
             print("Error loading dates with entries: \(error)")
+        }
+    }
+    
+    private func generateThumbnail(from videoData: Data) -> UIImage? {
+        // Create a temporary file URL
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileName = UUID().uuidString + ".mp4"
+        let videoURL = tempDirectory.appendingPathComponent(fileName)
+        
+        do {
+            // Write video data to temporary file
+            try videoData.write(to: videoURL)
+            
+            // Create asset and image generator
+            let asset = AVAsset(url: videoURL)
+            let imageGenerator = AVAssetImageGenerator(asset: asset)
+            imageGenerator.appliesPreferredTrackTransform = true
+            imageGenerator.maximumSize = CGSize(width: 200, height: 200)
+            
+            // Try to get thumbnail at 1 second, or at the beginning if video is shorter
+            let time = CMTime(seconds: 1.0, preferredTimescale: 600)
+            
+            do {
+                let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+                let thumbnail = UIImage(cgImage: cgImage)
+                
+                // Clean up temp file
+                try? FileManager.default.removeItem(at: videoURL)
+                
+                return thumbnail
+            } catch {
+                // If we can't get thumbnail at 1 second, try at the very beginning
+                let startTime = CMTime(seconds: 0.1, preferredTimescale: 600)
+                if let cgImage = try? imageGenerator.copyCGImage(at: startTime, actualTime: nil) {
+                    let thumbnail = UIImage(cgImage: cgImage)
+                    try? FileManager.default.removeItem(at: videoURL)
+                    return thumbnail
+                }
+                
+                print("Error generating thumbnail: \(error)")
+                try? FileManager.default.removeItem(at: videoURL)
+                return nil
+            }
+        } catch {
+            print("Error writing video data: \(error)")
+            try? FileManager.default.removeItem(at: videoURL)
+            return nil
         }
     }
 }
@@ -444,5 +574,109 @@ struct PhotoViewerView: View {
         }
     }
 }
+
+// MARK: - Video Player
+struct VideoPlayerView: View {
+    let videoData: Data
+    @Binding var isPresented: Bool
+    @State private var player: AVPlayer?
+    @State private var videoURL: URL?
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Close button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        cleanup()
+                        isPresented = false
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .padding()
+                    }
+                }
+                .frame(height: 60)
+                .background(Color.black.opacity(0.5))
+                
+                // Video player
+                if let player = player {
+                    VideoPlayer(player: player)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(2)
+                        Text("Loading video...")
+                            .foregroundColor(.white)
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .task {
+            await loadVideo()
+        }
+        .onDisappear {
+            cleanup()
+        }
+    }
+    
+    private func loadVideo() async {
+        do {
+            // Create a temporary file URL
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let fileName = UUID().uuidString + ".mp4"
+            let tempURL = tempDirectory.appendingPathComponent(fileName)
+            
+            print("📹 Writing video to: \(tempURL.path)")
+            print("📹 Video data size: \(videoData.count) bytes")
+            
+            // Write video data to temporary file
+            try videoData.write(to: tempURL)
+            
+            print("✅ Video written successfully")
+            
+            // Create player on main thread
+            await MainActor.run {
+                self.videoURL = tempURL
+                let newPlayer = AVPlayer(url: tempURL)
+                self.player = newPlayer
+                
+                print("▶️ Player created, starting playback")
+                newPlayer.play()
+            }
+        } catch {
+            print("❌ Error loading video: \(error)")
+        }
+    }
+    
+    private func cleanup() {
+        print("🧹 Cleaning up video player")
+        player?.pause()
+        player = nil
+        
+        // Clean up temporary file
+        if let url = videoURL {
+            try? FileManager.default.removeItem(at: url)
+            print("🗑️ Removed temporary video file")
+            videoURL = nil
+        }
+    }
+}
+
+// MARK: - Video Data Wrapper
+struct VideoDataWrapper: Identifiable {
+    let id = UUID()
+    let data: Data
+}
+
+
 
 

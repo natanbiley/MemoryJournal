@@ -699,6 +699,7 @@ class RichTextManager: ObservableObject {
 struct RichTextToolbar: View {
     @ObservedObject var manager: RichTextManager
     @Binding var showPhotoPicker: Bool
+    @Binding var showVideoPicker: Bool
     @State private var showColorPicker = false
     @State private var showBackgroundColorPicker = false
     @State private var showFontPicker = false
@@ -713,6 +714,13 @@ struct RichTextToolbar: View {
                     icon: "photo.on.rectangle.angled",
                     isActive: false,
                     action: { showPhotoPicker = true }
+                )
+                
+                // Video Picker
+                ToolbarButton(
+                    icon: "video.fill",
+                    isActive: false,
+                    action: { showVideoPicker = true }
                 )
                 
                 Divider()
