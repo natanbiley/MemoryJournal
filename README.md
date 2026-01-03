@@ -76,54 +76,6 @@ The app uses a freemium model with two subscription tiers:
 - Automatic transaction verification
 - Cross-device sync via Apple ID
 
-## 🚀 Getting Started
-
-### Prerequisites
-- Xcode 15.0 or later
-- iOS 17.0 or later
-- macOS for development
-- Apple Developer Account (for subscription features)
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/natanbiley/MemoryJournal.git
-cd MemoryJournal
-```
-
-2. Open the project in Xcode:
-```bash
-open MemoryJournal.xcodeproj
-```
-
-3. Configure your development team in Xcode:
-   - Select the project in the navigator
-   - Choose your target
-   - Select "Signing & Capabilities"
-   - Choose your development team
-
-4. Update subscription product IDs (if needed):
-   - Open `SubscriptionManager.swift`
-   - Update `monthlyProductID` and `yearlyProductID` with your App Store Connect product IDs
-
-5. Build and run:
-   - Select your target device or simulator
-   - Press `Cmd + R` or click the Run button
-
-## 🧪 Testing
-
-### StoreKit Testing
-The app includes a `Configuration.storekit` file for testing subscriptions locally without connecting to App Store Connect.
-
-To test subscriptions:
-1. Run the app in the simulator or on a device
-2. StoreKit will use the local configuration
-3. Test purchases, renewals, and cancellations
-4. Use Xcode's StoreKit transaction manager to view and manage test transactions
-
-### Sample Data
-The app includes sample entries for testing and preview purposes. Sample data is automatically loaded in Xcode previews.
 
 ## 📱 Usage
 
@@ -149,32 +101,6 @@ The app includes sample entries for testing and preview purposes. Sample data is
    - View subscription status
    - Start free trial or subscribe
    - Restore purchases if needed
-
-## 📂 Project Structure
-
-```
-MemoryJournal/
-├── MemoryJournalApp.swift          # App entry point
-├── ContentView.swift                # Main navigation
-├── Entry.swift                      # Data model
-├── EntryList.swift                  # Entry browsing
-├── EntryEditor.swift                # Entry creation/editing
-├── EntryStore.swift                 # Data operations
-├── RichTextEditor.swift             # Rich text interface
-├── ReviewView.swift                 # Memory review
-├── SettingsView.swift               # App settings
-├── SubscriptionManager.swift        # IAP management
-├── PaywallView.swift                # Premium subscription
-├── SampleData.swift                 # Test data
-├── Configuration.storekit           # StoreKit config
-├── Assets.xcassets/                 # App assets
-├── docs/                            # Documentation
-└── help/                            # Technical guides
-    ├── ARCHITECTURE.md              # System architecture
-    ├── IMPLEMENTATION_SUMMARY.md    # Implementation details
-    ├── SUBSCRIPTION_SETUP.md        # Subscription setup guide
-    └── TESTING_GUIDE.md             # Testing instructions
-```
 
 ## 🔒 Privacy & Security
 
@@ -203,11 +129,3 @@ Copyright © 2026 Natan Biley. All rights reserved.
 ## 🤝 Contributing
 
 This is a personal project. If you'd like to suggest features or report issues, please create an issue in the repository.
-
-## 📧 Contact
-
-For questions or support, please contact the developer through the repository.
-
----
-
-**Made with ❤️ using SwiftUI and SwiftData**
