@@ -165,9 +165,11 @@ struct FeatureRow: View {
                 Text(title)
                     .font(.body)
                 
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)

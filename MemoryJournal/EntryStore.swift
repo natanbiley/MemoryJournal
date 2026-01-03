@@ -44,4 +44,62 @@ class EntryStore {
         entryHTML = nil
         entryDate = nil
     }
+    
+    func getPreviousEntry(context: ModelContext) -> Entry? {
+        guard let currentEntryID = selectedEntryID,
+              let currentEntry = context.model(for: currentEntryID) as? Entry else {
+            return nil
+        }
+        
+        let descriptor = FetchDescriptor<Entry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        
+        do {
+            let allEntries = try context.fetch(descriptor)
+            guard let currentIndex = allEntries.firstIndex(where: { $0.persistentModelID == currentEntryID }) else {
+                return nil
+            }
+            
+            // Previous entry is the one after current index (since sorted reverse)
+            let previousIndex = currentIndex + 1
+            guard previousIndex < allEntries.count else {
+                return nil
+            }
+            
+            return allEntries[previousIndex]
+        } catch {
+            print("Error fetching entries: \(error)")
+            return nil
+        }
+    }
+    
+    func getNextEntry(context: ModelContext) -> Entry? {
+        guard let currentEntryID = selectedEntryID,
+              let currentEntry = context.model(for: currentEntryID) as? Entry else {
+            return nil
+        }
+        
+        let descriptor = FetchDescriptor<Entry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        
+        do {
+            let allEntries = try context.fetch(descriptor)
+            guard let currentIndex = allEntries.firstIndex(where: { $0.persistentModelID == currentEntryID }) else {
+                return nil
+            }
+            
+            // Next entry is the one before current index (since sorted reverse)
+            let nextIndex = currentIndex - 1
+            guard nextIndex >= 0 else {
+                return nil
+            }
+            
+            return allEntries[nextIndex]
+        } catch {
+            print("Error fetching entries: \(error)")
+            return nil
+        }
+    }
 }

@@ -133,10 +133,131 @@ struct ReviewView: View {
         return formatter.string(from: previousMonthStart)
     }
     
+    private var currentStreak: Int {
+        guard !allEntries.isEmpty else { return 0 }
+        
+        let calendar = Calendar.current
+        let today = Date()
+        var streak = 0
+        var currentDate = calendar.startOfDay(for: today)
+        
+        // Get all entry dates as start of day
+        let entryDates = Set(allEntries.map { calendar.startOfDay(for: $0.date) })
+        
+        // Check if there's an entry today or yesterday to start streak
+        if !entryDates.contains(currentDate) {
+            // If no entry today, check yesterday
+            guard let yesterday = calendar.date(byAdding: .day, value: -1, to: currentDate),
+                  entryDates.contains(yesterday) else {
+                return 0
+            }
+            currentDate = yesterday
+        }
+        
+        // Count consecutive days backwards
+        while entryDates.contains(currentDate) {
+            streak += 1
+            guard let previousDay = calendar.date(byAdding: .day, value: -1, to: currentDate) else {
+                break
+            }
+            currentDate = previousDay
+        }
+        
+        return streak
+    }
+    
+    private var longestStreak: Int {
+        guard !allEntries.isEmpty else { return 0 }
+        
+        let calendar = Calendar.current
+        
+        // Get unique entry dates sorted
+        let entryDates = Set(allEntries.map { calendar.startOfDay(for: $0.date) })
+            .sorted()
+        
+        guard !entryDates.isEmpty else { return 0 }
+        
+        var maxStreak = 1
+        var currentStreakCount = 1
+        
+        for i in 1..<entryDates.count {
+            let previousDate = entryDates[i - 1]
+            let currentDate = entryDates[i]
+            
+            // Check if dates are consecutive
+            if let nextDay = calendar.date(byAdding: .day, value: 1, to: previousDate),
+               calendar.isDate(nextDay, inSameDayAs: currentDate) {
+                currentStreakCount += 1
+                maxStreak = max(maxStreak, currentStreakCount)
+            } else {
+                currentStreakCount = 1
+            }
+        }
+        
+        return maxStreak
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    // Streak Tracker Section
+                    HStack(spacing: 16) {
+                        // Current Streak
+                        VStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "flame.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.orange.gradient)
+                                Text("\(currentStreak)")
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.primary)
+                                Text(currentStreak == 1 ? "day" : "days")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Text("Current Streak")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.orange.opacity(0.1))
+                        )
+                        
+                        // Longest Streak
+                        VStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trophy.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.yellow.gradient)
+                                Text("\(longestStreak)")
+                                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.primary)
+                                Text(currentStreak == 1 ? "day" : "days")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Text("Longest Streak")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.yellow.opacity(0.1))
+                        )
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    
                     // On This Day Section
                     VStack(alignment: .leading, spacing: 12) {
                         Button {

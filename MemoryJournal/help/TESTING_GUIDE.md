@@ -36,7 +36,7 @@ Press ⌘R to run
 3. ✅ Should show premium teaser with crown
 4. Tap "Unlock Month Reviews"
 5. ✅ See paywall
-
+testite
 #### Test Year Highlights Lock:
 1. Go to Review tab
 2. Tap "Year Highlights" section
@@ -50,7 +50,7 @@ Press ⌘R to run
 3. Select yearly (notice "BEST VALUE" badge)
 4. Tap "Start Free Trial"
 5. ✅ StoreKit dialog appears
-6. Confirm purchase (it's fake, no charge!)
+6. Confirm purchase (it's fake, no charge!)tedf
 7. ✅ Paywall dismisses
 8. ✅ All features now unlocked!
 
