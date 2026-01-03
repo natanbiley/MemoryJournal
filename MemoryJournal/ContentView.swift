@@ -4,18 +4,18 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
-            Tab("Entries", systemImage: "book.pages") {
+            Tab("Entries", systemImage: "book.badge.plus") {
                 EntryList()
             }
 
 
-            Tab("Insights", systemImage: "calendar") {
-                
+            Tab("Review", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90") {
+                ReviewView()
             }
 
 
             Tab("Settings", systemImage: "gear") {
-                
+                SettingsView()
             }
         }
     }

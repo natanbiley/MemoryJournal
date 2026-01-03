@@ -25,6 +25,16 @@ class Entry {
               date: dateFrom(year: 2025, month: 1, day: 1),
               bodyHTML: "<b>Happy New Year!</b> Setting intentions for 2025: <span style=\"background-color: #FFEB3B;\">focus on health</span>, <i>learning</i>, and <u>meaningful connections</u>."),
         
+        Entry(bodyText: "Woke up feeling refreshed and ready for the new year. Made a delicious breakfast and spent time planning my goals.", 
+              date: dateFrom(year: 2025, month: 1, day: 2),
+              bodyHTML: "Woke up feeling <b style=\"color: #4CAF50;\">refreshed</b> and ready for the new year. Made a <span style=\"background-color: #FFECB3;\">delicious breakfast</span> and spent time <i>planning my goals</i>."),
+        Entry(bodyText: "Woke up feeling refreshed and ready for the new year. Made a delicious breakfast and spent time planning my goals.", 
+              date: dateFrom(year: 2024, month: 1, day: 2),
+              bodyHTML: "Woke up feeling <b style=\"color: #4CAF50;\">refreshed</b> and ready for the new year. Made a <span style=\"background-color: #FFECB3;\">delicious breakfast</span> and spent time <i>planning my goals</i>."),
+        Entry(bodyText: "Woke up feeling refreshed and ready for the new year. Made a delicious breakfast and spent time planning my goals.", 
+              date: dateFrom(year: 2023, month: 1, day: 2),
+              bodyHTML: "Woke up feeling <b style=\"color: #4CAF50;\">refreshed</b> and ready for the new year. Made a <span style=\"background-color: #FFECB3;\">delicious breakfast</span> and spent time <i>planning my goals</i>."),
+        
         Entry(bodyText: "First morning run of the year. The cold air was refreshing and cleared my mind.", 
               date: dateFrom(year: 2025, month: 1, day: 3),
               bodyHTML: "First <b>morning run</b> of the year. The <span style=\"color: #2196F3;\">cold air</span> was refreshing and cleared my mind."),

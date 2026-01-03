@@ -700,6 +700,8 @@ struct RichTextToolbar: View {
     @ObservedObject var manager: RichTextManager
     @Binding var showPhotoPicker: Bool
     @Binding var showVideoPicker: Bool
+    var onPhotoButtonTap: (() -> Void)? = nil
+    var onVideoButtonTap: (() -> Void)? = nil
     @State private var showColorPicker = false
     @State private var showBackgroundColorPicker = false
     @State private var showFontPicker = false
@@ -713,14 +715,26 @@ struct RichTextToolbar: View {
                 ToolbarButton(
                     icon: "photo.on.rectangle.angled",
                     isActive: false,
-                    action: { showPhotoPicker = true }
+                    action: { 
+                        if let onPhotoButtonTap = onPhotoButtonTap {
+                            onPhotoButtonTap()
+                        } else {
+                            showPhotoPicker = true
+                        }
+                    }
                 )
                 
                 // Video Picker
                 ToolbarButton(
                     icon: "video.fill",
                     isActive: false,
-                    action: { showVideoPicker = true }
+                    action: { 
+                        if let onVideoButtonTap = onVideoButtonTap {
+                            onVideoButtonTap()
+                        } else {
+                            showVideoPicker = true
+                        }
+                    }
                 )
                 
                 Divider()

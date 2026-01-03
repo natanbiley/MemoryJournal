@@ -9,6 +9,9 @@ struct EntryEditor: View {
     @Environment(EntryStore.self) private var store
     
     @StateObject private var richTextManager = RichTextManager()
+    private var subscriptionManager = SubscriptionManager.shared
+    @State private var showPaywall = false
+    @State private var showPhotoLimitAlert = false
     @State private var showDatePicker = false
     @State private var showDateConflictAlert = false
     @State private var conflictingEntry: Entry?
@@ -90,11 +93,12 @@ struct EntryEditor: View {
                 } message: {
                     Text("This date already has an entry. Would you like to edit it?")
                 }
-                .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 10, matching: .images)
+                .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: subscriptionManager.isPremium ? nil : 5, matching: .images)
                 .onChange(of: selectedPhotos) { oldValue, newValue in
                     Task {
                         photoData.removeAll()
                         cachedImages.removeAll()
+                        
                         for item in newValue {
                             if let data = try? await item.loadTransferable(type: Data.self) {
                                 photoData.append(data)
@@ -115,6 +119,19 @@ struct EntryEditor: View {
                             }
                         }
                     }
+                }
+                .sheet(isPresented: $showPaywall) {
+                    PaywallView()
+                }
+                .alert("Photo Limit Reached", isPresented: $showPhotoLimitAlert) {
+                    Button("Upgrade to Premium") {
+                        showPaywall = true
+                    }
+                    Button("OK", role: .cancel) {
+                        showPhotoPicker = true
+                    }
+                } message: {
+                    Text("Free users can add up to 5 photos per entry. Upgrade to Premium for unlimited photos!")
                 }
             
             // Photo gallery
@@ -232,7 +249,25 @@ struct EntryEditor: View {
     }
     
     private func createToolbarView() -> UIView {
-        let toolbar = RichTextToolbar(manager: richTextManager, showPhotoPicker: $showPhotoPicker, showVideoPicker: $showVideoPicker)
+        let toolbar = RichTextToolbar(
+            manager: richTextManager,
+            showPhotoPicker: $showPhotoPicker,
+            showVideoPicker: $showVideoPicker,
+            onPhotoButtonTap: {
+                if !subscriptionManager.isPremium && photoData.count >= 5 {
+                    showPhotoLimitAlert = true
+                } else {
+                    showPhotoPicker = true
+                }
+            },
+            onVideoButtonTap: {
+                if subscriptionManager.canAddVideos() {
+                    showVideoPicker = true
+                } else {
+                    showPaywall = true
+                }
+            }
+        )
         let hostingController = UIHostingController(rootView: toolbar)
         hostingController.view.backgroundColor = UIColor.systemGray6
         
