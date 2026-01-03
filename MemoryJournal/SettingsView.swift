@@ -72,27 +72,8 @@ struct SettingsView: View {
                             .padding(.vertical, 8)
                         }
                     }
-                    
-                    Button {
-                        Task {
-                            await subscriptionManager.restorePurchases()
-                        }
-                    } label: {
-                        HStack {
-                            if subscriptionManager.isLoading {
-                                ProgressView()
-                                    .padding(.trailing, 8)
-                            }
-                            Text("Restore Purchases")
-                            Spacer()
-                        }
-                    }
-                    .disabled(subscriptionManager.isLoading)
-                } header: {
-                    Text("Subscription")
-                }
-                
-                // Premium Features Section
+
+                    // Premium Features Section
                 if !subscriptionManager.isPremium {
                     Section {
                         FeatureRow(
@@ -122,20 +103,30 @@ struct SettingsView: View {
                             title: "Year Highlights",
                             description: "Annual memory collections"
                         )
-                    } header: {
-                        Text("Premium Features")
                     }
+                }
+                    
+                    Button {
+                        Task {
+                            await subscriptionManager.restorePurchases()
+                        }
+                    } label: {
+                        HStack {
+                            if subscriptionManager.isLoading {
+                                ProgressView()
+                                    .padding(.trailing, 8)
+                            }
+                            Text("Restore Purchases")
+                            Spacer()
+                        }
+                    }
+                    .disabled(subscriptionManager.isLoading)
+                } header: {
+                    Text("Subscription")
                 }
                 
                 // App Information
                 Section {
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        Text("1.0.0")
-                            .foregroundStyle(.secondary)
-                    }
-                    
                     Link(destination: URL(string: "https://example.com/privacy")!) {
                         HStack {
                             Text("Privacy Policy")
@@ -145,14 +136,6 @@ struct SettingsView: View {
                         }
                     }
                     
-                    Link(destination: URL(string: "https://example.com/terms")!) {
-                        HStack {
-                            Text("Terms of Service")
-                            Spacer()
-                            Image(systemName: "arrow.up.forward")
-                                .font(.caption)
-                        }
-                    }
                 } header: {
                     Text("About")
                 }
