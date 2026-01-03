@@ -6,7 +6,7 @@ on:
       - main
       - newFeats  # Add your branch
     paths:
-      - 'docs/**'
+      - 'MemoryJournal/docs/**'
   workflow_dispatch:  # Allows manual triggering
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload the docs directory
-          path: './docs'
+          path: './MemoryJournal/docs'
 
       - name: Deploy to GitHub Pages
         id: deployment
