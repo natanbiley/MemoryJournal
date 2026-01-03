@@ -14,7 +14,7 @@ struct ContentView: View {
             }
 
 
-            Tab("Settings", systemImage: "gear") {
+            Tab("Account", systemImage: "person.circle") {
                 SettingsView()
             }
         }

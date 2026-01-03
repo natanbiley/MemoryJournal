@@ -19,19 +19,6 @@ struct PaywallView: View {
             
             ScrollView {
                 VStack(spacing: 30) {
-                    // Close button
-                    HStack {
-                        Spacer()
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                    }
-                    
                     // Header
                     VStack(spacing: 12) {
                         Image(systemName: "rosette")
@@ -188,6 +175,21 @@ struct PaywallView: View {
                         .padding(.horizontal, 32)
                         .padding(.bottom, 30)
                 }
+            }
+            
+            // Sticky close button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                    }
+                    .padding()
+                }
+                Spacer()
             }
         }
         .alert("Purchase Failed", isPresented: $showError) {
