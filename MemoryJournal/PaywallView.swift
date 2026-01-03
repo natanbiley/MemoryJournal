@@ -81,7 +81,7 @@ struct PaywallView: View {
                         
                         PaywallFeatureRow(
                             icon: "lock.shield.fill",
-                            color: .red,
+                            color: .blue,
                             title: "Privacy First",
                             description: "All data stays on your device, no account needed"
                         )
