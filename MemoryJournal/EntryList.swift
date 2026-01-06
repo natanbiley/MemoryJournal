@@ -161,7 +161,10 @@ struct EntryList: View {
             Text(entry.date, format: .dateTime.day()).bold().frame(width: 30)
             Divider()
             VStack(alignment: .leading, spacing: 4) {
-                Text(String(entry.bodyText.prefix(70)) + "...").padding(.leading, 5)
+                Text(entry.bodyText)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .padding(.leading, 5)
                 HStack(spacing: 8) {
                     if let photos = entry.photos, !photos.isEmpty {
                         HStack(spacing: 4) {

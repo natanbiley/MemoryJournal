@@ -3,6 +3,7 @@ import SwiftData
 import Combine
 import PhotosUI
 import AVKit
+import AVFoundation
 
 struct EntryEditor: View {
     @Environment(\.modelContext) private var context
@@ -26,6 +27,7 @@ struct EntryEditor: View {
     @State private var showPhotoViewer = false
     @State private var selectedVideos: [PhotosPickerItem] = []
     @State private var videoData: [Data] = []
+    @State private var cachedVideoThumbnails: [Int: UIImage] = [:]
     @State private var showVideoPicker = false
     @State private var selectedVideoIndex: Int = 0
     @State private var showVideoPlayer = false
@@ -126,7 +128,10 @@ struct EntryEditor: View {
                         for item in newValue {
                             if let data = try? await item.loadTransferable(type: Data.self) {
                                 photoData.append(data)
-                                if let uiImage = UIImage(data: data) {
+                                // Create downscaled thumbnail for gallery display
+                                if let thumbnail = await createThumbnail(from: data, targetSize: CGSize(width: 200, height: 200)) {
+                                    cachedImages.append(thumbnail)
+                                } else if let uiImage = UIImage(data: data) {
                                     cachedImages.append(uiImage)
                                 }
                             }
@@ -137,9 +142,20 @@ struct EntryEditor: View {
                 .onChange(of: selectedVideos) { oldValue, newValue in
                     Task {
                         videoData.removeAll()
-                        for item in newValue {
+                        cachedVideoThumbnails.removeAll()
+                        
+                        for (index, item) in newValue.enumerated() {
                             if let data = try? await item.loadTransferable(type: Data.self) {
                                 videoData.append(data)
+                                // Generate thumbnail asynchronously
+                                let currentIndex = index
+                                Task.detached(priority: .userInitiated) {
+                                    if let thumbnail = await generateThumbnailAsync(from: data) {
+                                        await MainActor.run {
+                                            cachedVideoThumbnails[currentIndex] = thumbnail
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -201,7 +217,7 @@ struct EntryEditor: View {
                         ForEach(Array(videoData.enumerated()), id: \.offset) { index, data in
                             ZStack(alignment: .topTrailing) {
                                 ZStack {
-                                    if let thumbnail = generateThumbnail(from: data) {
+                                    if let thumbnail = cachedVideoThumbnails[index] {
                                         Image(uiImage: thumbnail)
                                             .resizable()
                                             .scaledToFill()
@@ -211,6 +227,22 @@ struct EntryEditor: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .fill(Color.gray.opacity(0.3))
                                             .frame(width: 100, height: 100)
+                                            .overlay {
+                                                ProgressView()
+                                            }
+                                            .onAppear {
+                                                // Generate thumbnail if not cached
+                                                if cachedVideoThumbnails[index] == nil {
+                                                    let currentIndex = index
+                                                    Task.detached(priority: .userInitiated) {
+                                                        if let thumbnail = await generateThumbnailAsync(from: data) {
+                                                            await MainActor.run {
+                                                                cachedVideoThumbnails[currentIndex] = thumbnail
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                     }
                                     
                                     Image(systemName: "play.circle.fill")
@@ -309,6 +341,7 @@ struct EntryEditor: View {
         cachedImages.removeAll()
         selectedPhotos.removeAll()
         videoData.removeAll()
+        cachedVideoThumbnails.removeAll()
         selectedVideos.removeAll()
         isNewEntryFavorite = false
         
@@ -337,11 +370,34 @@ struct EntryEditor: View {
             if let existingEntry = existingEntry {
                 if let photos = existingEntry.photos {
                     photoData = photos
-                    // Cache the images on load
-                    cachedImages = photos.compactMap { UIImage(data: $0) }
+                    // Create downscaled thumbnails asynchronously for gallery display
+                    Task {
+                        var thumbnails: [UIImage] = []
+                        for data in photos {
+                            if let thumbnail = await createThumbnail(from: data, targetSize: CGSize(width: 200, height: 200)) {
+                                thumbnails.append(thumbnail)
+                            } else if let uiImage = UIImage(data: data) {
+                                thumbnails.append(uiImage)
+                            }
+                        }
+                        await MainActor.run {
+                            cachedImages = thumbnails
+                        }
+                    }
                 }
                 if let videos = existingEntry.videos {
                     videoData = videos
+                    // Generate video thumbnails asynchronously
+                    for (index, data) in videos.enumerated() {
+                        let currentIndex = index
+                        Task.detached(priority: .userInitiated) {
+                            if let thumbnail = await generateThumbnailAsync(from: data) {
+                                await MainActor.run {
+                                    cachedVideoThumbnails[currentIndex] = thumbnail
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -480,6 +536,73 @@ struct EntryEditor: View {
         }
     }
     
+    // MARK: - Async Thumbnail Helpers
+    
+    /// Creates a downscaled thumbnail from image data for efficient gallery display
+    private func createThumbnail(from imageData: Data, targetSize: CGSize) async -> UIImage? {
+        return await Task.detached(priority: .userInitiated) {
+            guard let imageSource = CGImageSourceCreateWithData(imageData as CFData, nil) else {
+                return nil
+            }
+            
+            let maxDimension = max(targetSize.width, targetSize.height) * UIScreen.main.scale
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true
+            ]
+            
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, options as CFDictionary) else {
+                return nil
+            }
+            
+            return UIImage(cgImage: cgImage)
+        }.value
+    }
+    
+    /// Generates a video thumbnail asynchronously on a background thread
+    private func generateThumbnailAsync(from videoData: Data) async -> UIImage? {
+        return await Task.detached(priority: .userInitiated) {
+            // Create a temporary file URL
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let fileName = UUID().uuidString + ".mp4"
+            let videoURL = tempDirectory.appendingPathComponent(fileName)
+            
+            defer {
+                // Always clean up temp file
+                try? FileManager.default.removeItem(at: videoURL)
+            }
+            
+            do {
+                // Write video data to temporary file
+                try videoData.write(to: videoURL)
+                
+                // Create asset and image generator
+                let asset = AVAsset(url: videoURL)
+                let imageGenerator = AVAssetImageGenerator(asset: asset)
+                imageGenerator.appliesPreferredTrackTransform = true
+                imageGenerator.maximumSize = CGSize(width: 200, height: 200)
+                
+                // Try to get thumbnail at 1 second, or at the beginning if video is shorter
+                let time = CMTime(seconds: 1.0, preferredTimescale: 600)
+                
+                do {
+                    let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+                    return UIImage(cgImage: cgImage)
+                } catch {
+                    // If we can't get thumbnail at 1 second, try at the very beginning
+                    let startTime = CMTime(seconds: 0.1, preferredTimescale: 600)
+                    if let cgImage = try? imageGenerator.copyCGImage(at: startTime, actualTime: nil) {
+                        return UIImage(cgImage: cgImage)
+                    }
+                    return nil
+                }
+            } catch {
+                return nil
+            }
+        }.value
+    }
+
     private func navigateToPreviousEntry() {
         guard let previousEntry = store.getPreviousEntry(context: context) else {
             return
@@ -828,6 +951,10 @@ struct VideoPlayerView: View {
     
     private func loadVideo() async {
         do {
+            // Configure audio session for playback
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
+            try AVAudioSession.sharedInstance().setActive(true)
+            
             // Create a temporary file URL
             let tempDirectory = FileManager.default.temporaryDirectory
             let fileName = UUID().uuidString + ".mp4"
