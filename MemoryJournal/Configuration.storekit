@@ -43,9 +43,9 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.memoryjournal.premium.monthly",
+          "productID" : "DayScribePremiumMonthly",
           "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Monthly Premium",
+          "referenceName" : "DayScribe Premium Monthly",
           "subscriptionGroupID" : "21524251",
           "type" : "RecurringSubscription"
         },
@@ -73,9 +73,9 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.memoryjournal.premium.yearly",
+          "productID" : "DayScribePremiumYearly",
           "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Yearly Premium",
+          "referenceName" : "DayScribe Premium Yearly",
           "subscriptionGroupID" : "21524251",
           "type" : "RecurringSubscription"
         }

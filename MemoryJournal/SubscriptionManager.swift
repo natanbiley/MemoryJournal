@@ -7,8 +7,8 @@ class SubscriptionManager {
     static let shared = SubscriptionManager()
     
     // Product identifiers - replace with your actual IDs from App Store Connect
-    private let monthlyProductID = "com.memoryjournal.premium.monthly"
-    private let yearlyProductID = "com.memoryjournal.premium.yearly"
+    private let monthlyProductID = "DayScribePremiumMonthly"
+    private let yearlyProductID = "DayScribePremiumYearly"
     
     var products: [Product] = []
     var purchasedSubscriptions: [Product] = []
