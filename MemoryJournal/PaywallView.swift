@@ -25,7 +25,7 @@ struct PaywallView: View {
                             .font(.system(size: 60))
                             .foregroundStyle(.orange.gradient)
                         
-                        Text("Memory Journal Premium")
+                        Text("DayScribe Premium")
                             .font(.title)
                             .bold()
                             .multilineTextAlignment(.center)

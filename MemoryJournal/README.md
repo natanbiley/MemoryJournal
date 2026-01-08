@@ -1,10 +1,10 @@
-# Memory Journal 📔
+# DayScribe 📔
 
 A beautiful and intuitive journaling app for iOS that helps you capture and preserve your memories with rich text formatting, photos, and videos.
 
 ## Overview
 
-Memory Journal is a SwiftUI-based iOS application that provides a modern, elegant way to maintain a daily journal. With support for rich text editing, multimedia content, and powerful organization features, it's the perfect companion for documenting your life's moments.
+DayScribe is a SwiftUI-based iOS application that provides a modern, elegant way to maintain a daily journal. With support for rich text editing, multimedia content, and powerful organization features, it's the perfect companion for documenting your life's moments.
 
 ## ✨ Features
 

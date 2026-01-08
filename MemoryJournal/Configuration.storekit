@@ -38,7 +38,7 @@
           },
           "localizations" : [
             {
-              "description" : "Monthly subscription to Memory Journal Premium",
+              "description" : "Monthly subscription to DayScribe Premium",
               "displayName" : "Monthly Premium",
               "locale" : "en_US"
             }
@@ -68,7 +68,7 @@
           },
           "localizations" : [
             {
-              "description" : "Yearly subscription to Memory Journal Premium with best value",
+              "description" : "Yearly subscription to DayScribe Premium with best value",
               "displayName" : "Yearly Premium",
               "locale" : "en_US"
             }

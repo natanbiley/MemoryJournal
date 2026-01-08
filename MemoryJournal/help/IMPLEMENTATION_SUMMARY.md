@@ -3,7 +3,7 @@
 ## 🎯 What's Been Implemented
 
 ### ✅ Complete Subscription System
-Your Memory Journal app now has a fully functional subscription system that works **without any backend or account creation**. Everything is managed by Apple through StoreKit 2.
+Your DayScribe app now has a fully functional subscription system that works **without any backend or account creation**. Everything is managed by Apple through StoreKit 2.
 
 ## 📱 New Files Created
 

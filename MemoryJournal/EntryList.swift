@@ -96,7 +96,7 @@ struct EntryList: View {
             .padding(.bottom, 8)
             
             VStack(spacing: 12) {
-                Text("Welcome to Memory Book!")
+                Text("Welcome to DayScribe!")
                     .font(.title)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
@@ -343,12 +343,15 @@ struct EntryList: View {
                 Button(action: {
                     store.showEditor(context: context)
                 }) {
-                    Image(systemName: "plus")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .frame(width: 50, height: 60)
-                        .clipShape(Circle())
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor)
+                            .frame(width: 46, height: 56)
+                        Image(systemName: "plus")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 20)
@@ -367,13 +370,13 @@ struct EntryList: View {
                 } else if filteredEntries.isEmpty && showFavoritesOnly {
                     emptyFavoritesView
                 }
-                
+
                 mainListView
                     .toolbar { toolbarContent }
                     .toolbarBackground(.hidden, for: .navigationBar)
                     .toolbarBackground(.white, for: .navigationBar)
                     .environment(\.editMode, $editMode)
-                
+
                 floatingAddButton
             }
             .navigationTitle("Entries")
@@ -383,6 +386,11 @@ struct EntryList: View {
             }
             .sheet(isPresented: $showWelcomeSheet) {
                 WelcomeView()
+            }
+            .onAppear {
+                if entries.isEmpty && searchText.isEmpty && !showFavoritesOnly {
+                    showWelcomeSheet = true
+                }
             }
         }
     }
@@ -396,6 +404,7 @@ struct WelcomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 32) {
+                    Spacer()
                     // App Icon and Title
                     VStack(spacing: 16) {
                         ZStack {
@@ -407,10 +416,10 @@ struct WelcomeView: View {
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .frame(width: 120, height: 120)
+                                .frame(width: 140, height: 140)
                             
                             Image(systemName: "book.closed.fill")
-                                .font(.system(size: 50))
+                                .font(.system(size: 70))
                                 .foregroundStyle(
                                     LinearGradient(
                                         gradient: Gradient(colors: [.blue, .purple]),
@@ -419,8 +428,12 @@ struct WelcomeView: View {
                                     )
                                 )
                         }
+                        Text("Welcome to DayScribe!")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 40)
                     
                     // Features List
                     VStack(alignment: .leading, spacing: 24) {
@@ -428,14 +441,14 @@ struct WelcomeView: View {
                             icon: "pencil.and.outline",
                             color: .blue,
                             title: "Write about your day",
-                            description: "What did you do? Who did you see? How did you feel? Write down funny moments, interactions, ideas, have fun!"
+                            description: "What did you do? Who did you see? How did you feel? Write down funny moments, interactions, ideas, get creative and have fun!"
                         )
                         
                         FeatureRow(
                             icon: "photo.on.rectangle",
                             color: .green,
                             title: "Add Photos & Videos",
-                            description: ""
+                            description: "Re-live your travels, events, get-togethers and special moments"
                         )
                         
                         FeatureRow(
@@ -449,6 +462,12 @@ struct WelcomeView: View {
                             icon: "calendar",
                             color: .orange,
                             title: "Review your Highlights from the past",
+                            description: "Get monthly and yearly summaries of your favorite memories"
+                        )
+                        FeatureRow(
+                            icon: "plus.circle.fill",
+                            color: .blue,
+                            title: "Tap the + button to get started!",
                             description: ""
                         )
                     }
@@ -457,7 +476,7 @@ struct WelcomeView: View {
                     Spacer(minLength: 20)
                 }
             }
-            .navigationTitle("About Memory Book")
+            .navigationTitle("About DayScribe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

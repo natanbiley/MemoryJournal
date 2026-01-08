@@ -1,7 +1,7 @@
 # In-App Purchase Setup Guide
 
 ## Overview
-Your Memory Journal app now has a complete subscription system with the following features gated:
+Your DayScribe app now has a complete subscription system with the following features gated:
 - **Videos**: Premium only
 - **Photos**: Limited to 5 per entry for free users, unlimited for premium
 - **Month Reviews**: Premium only
