@@ -240,7 +240,7 @@ struct ProductButton: View {
     let action: () -> Void
     
     private var isYearly: Bool {
-        product.id.contains("yearly")
+        product.id.lowercased().contains("yearly")
     }
     
     var body: some View {

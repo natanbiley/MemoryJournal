@@ -26,13 +26,24 @@ struct EntryEditor: View {
     @State private var selectedPhotoIndex: Int?
     @State private var showPhotoViewer = false
     @State private var selectedVideos: [PhotosPickerItem] = []
-    @State private var videoData: [Data] = []
+    @State private var videoFilenames: [String] = []  // Store filenames of videos in Documents directory
     @State private var cachedVideoThumbnails: [Int: UIImage] = [:]
     @State private var showVideoPicker = false
     @State private var selectedVideoIndex: Int = 0
     @State private var showVideoPlayer = false
-    @State private var currentVideoData: VideoDataWrapper?
+    @State private var currentVideoURL: URL?  // Direct URL for video playback
     @State private var isNewEntryFavorite = false
+    @State private var isSavingVideos = false  // Show progress when saving large videos
+    @State private var isNavigating = false  // Loading state for entry navigation
+    
+    // Glass prominent button style with fallback for iOS < 26
+    private var glassProminentButtonStyle: some PrimitiveButtonStyle {
+        if #available(iOS 26.0, *) {
+            return AnyPrimitiveButtonStyle(.glassProminent)
+        } else {
+            return AnyPrimitiveButtonStyle(.borderedProminent)
+        }
+    }
     
     var body: some View {
         @Bindable var store = store
@@ -80,7 +91,7 @@ struct EntryEditor: View {
                             temporarySelectedDate = store.entryDate ?? Date()
                             showDatePicker.toggle()
                         }
-                        .buttonStyle(.glassProminent)
+                        .buttonStyle(glassProminentButtonStyle)
                     }
                 }
                 
@@ -122,10 +133,10 @@ struct EntryEditor: View {
                 .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: subscriptionManager.isPremium ? nil : 5, matching: .images)
                 .onChange(of: selectedPhotos) { oldValue, newValue in
                     Task {
-                        photoData.removeAll()
-                        cachedImages.removeAll()
+                        // Only process newly added items
+                        let newItems = newValue.filter { !oldValue.contains($0) }
                         
-                        for item in newValue {
+                        for item in newItems {
                             if let data = try? await item.loadTransferable(type: Data.self) {
                                 photoData.append(data)
                                 // Create downscaled thumbnail for gallery display
@@ -141,23 +152,26 @@ struct EntryEditor: View {
                 .photosPicker(isPresented: $showVideoPicker, selection: $selectedVideos, maxSelectionCount: 5, matching: .videos)
                 .onChange(of: selectedVideos) { oldValue, newValue in
                     Task {
-                        videoData.removeAll()
-                        cachedVideoThumbnails.removeAll()
+                        // Only process newly added items
+                        let newItems = newValue.filter { !oldValue.contains($0) }
                         
-                        for (index, item) in newValue.enumerated() {
-                            if let data = try? await item.loadTransferable(type: Data.self) {
-                                videoData.append(data)
+                        isSavingVideos = true
+                        
+                        for item in newItems {
+                            // Save video directly to Documents directory
+                            if let filename = await VideoStorageManager.shared.saveVideo(from: item) {
+                                let currentIndex = videoFilenames.count
+                                videoFilenames.append(filename)
                                 // Generate thumbnail asynchronously
-                                let currentIndex = index
-                                Task.detached(priority: .userInitiated) {
-                                    if let thumbnail = await generateThumbnailAsync(from: data) {
-                                        await MainActor.run {
-                                            cachedVideoThumbnails[currentIndex] = thumbnail
-                                        }
+                                Task {
+                                    if let thumbnail = await VideoStorageManager.shared.generateThumbnail(for: filename) {
+                                        cachedVideoThumbnails[currentIndex] = thumbnail
                                     }
                                 }
                             }
                         }
+                        
+                        isSavingVideos = false
                     }
                 }
                 .sheet(isPresented: $showPaywall) {
@@ -174,8 +188,25 @@ struct EntryEditor: View {
                     Text("Free users can add up to 5 photos per entry. Upgrade to Premium for unlimited photos!")
                 }
             
-            // Photo gallery
-            if !photoData.isEmpty {
+            // Show loading view during navigation
+            if isNavigating {
+                VStack {
+                    Spacer()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(1.5)
+                        Text("Loading entry...")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .systemBackground))
+            } else {
+                // Photo gallery
+                if !photoData.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(Array(cachedImages.enumerated()), id: \.offset) { index, uiImage in
@@ -185,6 +216,7 @@ struct EntryEditor: View {
                                     .scaledToFill()
                                     .frame(width: 100, height: 100)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .contentShape(RoundedRectangle(cornerRadius: 8))
                                     .onTapGesture {
                                         selectedPhotoIndex = index
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -195,12 +227,13 @@ struct EntryEditor: View {
                                 Button(action: {
                                     photoData.remove(at: index)
                                     cachedImages.remove(at: index)
-                                    selectedPhotos.remove(at: index)
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 22))
                                         .foregroundColor(.white)
                                         .background(Color.black.opacity(0.6).clipShape(Circle()))
                                 }
+                                .buttonStyle(.plain)
                                 .padding(4)
                             }
                         }
@@ -211,10 +244,10 @@ struct EntryEditor: View {
             }
             
             // Video gallery
-            if !videoData.isEmpty {
+            if !videoFilenames.isEmpty || isSavingVideos {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(Array(videoData.enumerated()), id: \.offset) { index, data in
+                        ForEach(Array(videoFilenames.enumerated()), id: \.offset) { index, filename in
                             ZStack(alignment: .topTrailing) {
                                 ZStack {
                                     if let thumbnail = cachedVideoThumbnails[index] {
@@ -230,16 +263,11 @@ struct EntryEditor: View {
                                             .overlay {
                                                 ProgressView()
                                             }
-                                            .onAppear {
+                                            .task {
                                                 // Generate thumbnail if not cached
                                                 if cachedVideoThumbnails[index] == nil {
-                                                    let currentIndex = index
-                                                    Task.detached(priority: .userInitiated) {
-                                                        if let thumbnail = await generateThumbnailAsync(from: data) {
-                                                            await MainActor.run {
-                                                                cachedVideoThumbnails[currentIndex] = thumbnail
-                                                            }
-                                                        }
+                                                    if let thumbnail = await VideoStorageManager.shared.generateThumbnail(for: filename) {
+                                                        cachedVideoThumbnails[index] = thumbnail
                                                     }
                                                 }
                                             }
@@ -250,25 +278,45 @@ struct EntryEditor: View {
                                         .foregroundColor(.white)
                                         .shadow(radius: 3)
                                 }
+                                .contentShape(RoundedRectangle(cornerRadius: 8))
                                 .onTapGesture {
-                                    print("🎬 Video tapped at index: \(index), total videos: \(videoData.count)")
-                                    selectedVideoIndex = index
-                                    currentVideoData = VideoDataWrapper(data: data)
-                                    print("🎬 Set currentVideoData with \(data.count) bytes")
+                                    // Play video directly from file URL - no loading into memory!
+                                    let videoURL = VideoStorageManager.shared.videoURL(for: filename)
+                                    currentVideoURL = videoURL
                                     showVideoPlayer = true
-                                    print("🎬 showVideoPlayer set to true")
                                 }
                                 
                                 Button(action: {
-                                    videoData.remove(at: index)
-                                    selectedVideos.remove(at: index)
+                                    // Delete video file and remove from list
+                                    Task {
+                                        await VideoStorageManager.shared.deleteVideo(filename: filename)
+                                    }
+                                    videoFilenames.remove(at: index)
+                                    cachedVideoThumbnails.removeValue(forKey: index)
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 22))
                                         .foregroundColor(.white)
                                         .background(Color.black.opacity(0.6).clipShape(Circle()))
                                 }
+                                .buttonStyle(.plain)
                                 .padding(4)
                             }
+                        }
+                        
+                        // Show loading indicator while saving videos
+                        if isSavingVideos {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 100, height: 100)
+                                .overlay {
+                                    VStack(spacing: 4) {
+                                        ProgressView()
+                                        Text("Saving...")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
+                                }
                         }
                     }
                     .padding(.horizontal)
@@ -287,20 +335,42 @@ struct EntryEditor: View {
             )
             .onAppear {
                 loadInitialContent()
+                // Open date picker by default for new entries
+                if store.selectedEntryID == nil && store.entryDate == nil {
+                    temporarySelectedDate = Date()
+                    showDatePicker = true
+                }
             }
             .onChange(of: store.selectedEntryID) { oldValue, newValue in
                 // Reload content when editing an entry
                 loadInitialContent()
             }
+            }
         }
         .fullScreenCover(isPresented: $showPhotoViewer) {
             PhotoViewerView(photoData: photoData, currentIndex: selectedPhotoIndex ?? 0, isPresented: $showPhotoViewer)
         }
-        .fullScreenCover(item: $currentVideoData) { videoData in
-            VideoPlayerView(videoData: videoData.data, isPresented: Binding(
-                get: { showVideoPlayer },
-                set: { showVideoPlayer = $0; if !$0 { currentVideoData = nil } }
-            ))
+        .fullScreenCover(isPresented: $showVideoPlayer) {
+            if let videoURL = currentVideoURL {
+                VideoPlayerView(videoURL: videoURL, isPresented: $showVideoPlayer)
+            } else {
+                // Fallback UI to avoid an empty white screen if URL isn't ready
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("Preparing video…")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+        .onChange(of: showVideoPlayer) { _, isShowing in
+            if !isShowing {
+                // Clear URL when player is dismissed
+                currentVideoURL = nil
+            }
         }
     }
     
@@ -340,7 +410,8 @@ struct EntryEditor: View {
         photoData.removeAll()
         cachedImages.removeAll()
         selectedPhotos.removeAll()
-        videoData.removeAll()
+        // Note: Don't delete video files here - they are permanent storage
+        videoFilenames.removeAll()
         cachedVideoThumbnails.removeAll()
         selectedVideos.removeAll()
         isNewEntryFavorite = false
@@ -385,16 +456,14 @@ struct EntryEditor: View {
                         }
                     }
                 }
-                if let videos = existingEntry.videos {
-                    videoData = videos
-                    // Generate video thumbnails asynchronously
-                    for (index, data) in videos.enumerated() {
-                        let currentIndex = index
-                        Task.detached(priority: .userInitiated) {
-                            if let thumbnail = await generateThumbnailAsync(from: data) {
-                                await MainActor.run {
-                                    cachedVideoThumbnails[currentIndex] = thumbnail
-                                }
+                // Load video filenames - instant, no data loading!
+                if let filenames = existingEntry.videoFilenames {
+                    videoFilenames = filenames
+                    // Generate thumbnails asynchronously
+                    for (index, filename) in filenames.enumerated() {
+                        Task {
+                            if let thumbnail = await VideoStorageManager.shared.generateThumbnail(for: filename) {
+                                cachedVideoThumbnails[index] = thumbnail
                             }
                         }
                     }
@@ -406,8 +475,8 @@ struct EntryEditor: View {
     private func saveEntry() {
         let plainText = richTextManager.getPlainText().trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Dismiss if no text is entered
-        guard !plainText.isEmpty else {
+        // Dismiss if no text, photos, or videos are entered
+        guard !plainText.isEmpty || !photoData.isEmpty || !videoFilenames.isEmpty else {
             store.dismissEditor()
             return
         }
@@ -422,16 +491,24 @@ struct EntryEditor: View {
         if let entryID = store.selectedEntryID {
             let existingEntry = context.model(for: entryID) as? Entry
             if let existingEntry = existingEntry {
+                // Delete old video files that are no longer referenced
+                if let oldFilenames = existingEntry.videoFilenames {
+                    let removedFilenames = Set(oldFilenames).subtracting(Set(videoFilenames))
+                    Task {
+                        await VideoStorageManager.shared.deleteVideos(filenames: Array(removedFilenames))
+                    }
+                }
+                
                 // Update existing entry
                 existingEntry.bodyText = plainText
                 existingEntry.bodyHTML = htmlString
                 existingEntry.date = date
                 existingEntry.photos = photoData.isEmpty ? nil : photoData
-                existingEntry.videos = videoData.isEmpty ? nil : videoData
+                existingEntry.videoFilenames = videoFilenames.isEmpty ? nil : videoFilenames
             }
         } else {
             // Create new entry
-            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData, videos: videoData.isEmpty ? nil : videoData, isFavorite: isNewEntryFavorite)
+            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData, videoFilenames: videoFilenames.isEmpty ? nil : videoFilenames, isFavorite: isNewEntryFavorite)
             context.insert(newEntry)
         }
         
@@ -489,54 +566,7 @@ struct EntryEditor: View {
         }
     }
     
-    private func generateThumbnail(from videoData: Data) -> UIImage? {
-        // Create a temporary file URL
-        let tempDirectory = FileManager.default.temporaryDirectory
-        let fileName = UUID().uuidString + ".mp4"
-        let videoURL = tempDirectory.appendingPathComponent(fileName)
-        
-        do {
-            // Write video data to temporary file
-            try videoData.write(to: videoURL)
-            
-            // Create asset and image generator
-            let asset = AVAsset(url: videoURL)
-            let imageGenerator = AVAssetImageGenerator(asset: asset)
-            imageGenerator.appliesPreferredTrackTransform = true
-            imageGenerator.maximumSize = CGSize(width: 200, height: 200)
-            
-            // Try to get thumbnail at 1 second, or at the beginning if video is shorter
-            let time = CMTime(seconds: 1.0, preferredTimescale: 600)
-            
-            do {
-                let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-                let thumbnail = UIImage(cgImage: cgImage)
-                
-                // Clean up temp file
-                try? FileManager.default.removeItem(at: videoURL)
-                
-                return thumbnail
-            } catch {
-                // If we can't get thumbnail at 1 second, try at the very beginning
-                let startTime = CMTime(seconds: 0.1, preferredTimescale: 600)
-                if let cgImage = try? imageGenerator.copyCGImage(at: startTime, actualTime: nil) {
-                    let thumbnail = UIImage(cgImage: cgImage)
-                    try? FileManager.default.removeItem(at: videoURL)
-                    return thumbnail
-                }
-                
-                print("Error generating thumbnail: \(error)")
-                try? FileManager.default.removeItem(at: videoURL)
-                return nil
-            }
-        } catch {
-            print("Error writing video data: \(error)")
-            try? FileManager.default.removeItem(at: videoURL)
-            return nil
-        }
-    }
-    
-    // MARK: - Async Thumbnail Helpers
+    // MARK: - Thumbnail Helpers
     
     /// Creates a downscaled thumbnail from image data for efficient gallery display
     private func createThumbnail(from imageData: Data, targetSize: CGSize) async -> UIImage? {
@@ -559,54 +589,14 @@ struct EntryEditor: View {
             return UIImage(cgImage: cgImage)
         }.value
     }
-    
-    /// Generates a video thumbnail asynchronously on a background thread
-    private func generateThumbnailAsync(from videoData: Data) async -> UIImage? {
-        return await Task.detached(priority: .userInitiated) {
-            // Create a temporary file URL
-            let tempDirectory = FileManager.default.temporaryDirectory
-            let fileName = UUID().uuidString + ".mp4"
-            let videoURL = tempDirectory.appendingPathComponent(fileName)
-            
-            defer {
-                // Always clean up temp file
-                try? FileManager.default.removeItem(at: videoURL)
-            }
-            
-            do {
-                // Write video data to temporary file
-                try videoData.write(to: videoURL)
-                
-                // Create asset and image generator
-                let asset = AVAsset(url: videoURL)
-                let imageGenerator = AVAssetImageGenerator(asset: asset)
-                imageGenerator.appliesPreferredTrackTransform = true
-                imageGenerator.maximumSize = CGSize(width: 200, height: 200)
-                
-                // Try to get thumbnail at 1 second, or at the beginning if video is shorter
-                let time = CMTime(seconds: 1.0, preferredTimescale: 600)
-                
-                do {
-                    let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-                    return UIImage(cgImage: cgImage)
-                } catch {
-                    // If we can't get thumbnail at 1 second, try at the very beginning
-                    let startTime = CMTime(seconds: 0.1, preferredTimescale: 600)
-                    if let cgImage = try? imageGenerator.copyCGImage(at: startTime, actualTime: nil) {
-                        return UIImage(cgImage: cgImage)
-                    }
-                    return nil
-                }
-            } catch {
-                return nil
-            }
-        }.value
-    }
 
     private func navigateToPreviousEntry() {
         guard let previousEntry = store.getPreviousEntry(context: context) else {
             return
         }
+        
+        // Show loading overlay
+        isNavigating = true
         
         // Save current entry before navigating
         saveEntryWithoutDismissing()
@@ -614,6 +604,11 @@ struct EntryEditor: View {
         // Load the previous entry
         store.showEditor(for: previousEntry.persistentModelID, context: context)
         loadInitialContent()
+        
+        // Hide loading overlay after content loads
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            isNavigating = false
+        }
     }
     
     private func navigateToNextEntry() {
@@ -621,12 +616,20 @@ struct EntryEditor: View {
             return
         }
         
+        // Show loading overlay
+        isNavigating = true
+        
         // Save current entry before navigating
         saveEntryWithoutDismissing()
         
         // Load the next entry
         store.showEditor(for: nextEntry.persistentModelID, context: context)
         loadInitialContent()
+        
+        // Hide loading overlay after content loads
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            isNavigating = false
+        }
     }
     
     private func saveEntryWithoutDismissing() {
@@ -647,16 +650,24 @@ struct EntryEditor: View {
         if let entryID = store.selectedEntryID {
             let existingEntry = context.model(for: entryID) as? Entry
             if let existingEntry = existingEntry {
+                // Delete old video files that are no longer referenced
+                if let oldFilenames = existingEntry.videoFilenames {
+                    let removedFilenames = Set(oldFilenames).subtracting(Set(videoFilenames))
+                    Task {
+                        await VideoStorageManager.shared.deleteVideos(filenames: Array(removedFilenames))
+                    }
+                }
+                
                 // Update existing entry
                 existingEntry.bodyText = plainText
                 existingEntry.bodyHTML = htmlString
                 existingEntry.date = date
                 existingEntry.photos = photoData.isEmpty ? nil : photoData
-                existingEntry.videos = videoData.isEmpty ? nil : videoData
+                existingEntry.videoFilenames = videoFilenames.isEmpty ? nil : videoFilenames
             }
         } else {
             // Create new entry
-            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData, videos: videoData.isEmpty ? nil : videoData, isFavorite: isNewEntryFavorite)
+            let newEntry = Entry(bodyText: plainText, date: date, bodyHTML: htmlString, photos: photoData.isEmpty ? nil : photoData, videoFilenames: videoFilenames.isEmpty ? nil : videoFilenames, isFavorite: isNewEntryFavorite)
             context.insert(newEntry)
         }
         
@@ -898,10 +909,9 @@ struct PhotoViewerView: View {
 
 // MARK: - Video Player
 struct VideoPlayerView: View {
-    let videoData: Data
+    let videoURL: URL  // Direct file URL - no loading into memory!
     @Binding var isPresented: Bool
     @State private var player: AVPlayer?
-    @State private var videoURL: URL?
     
     var body: some View {
         ZStack {
@@ -941,67 +951,34 @@ struct VideoPlayerView: View {
                 }
             }
         }
-        .task {
-            await loadVideo()
+        .onAppear {
+            setupPlayer()
         }
         .onDisappear {
             cleanup()
         }
     }
     
-    private func loadVideo() async {
+    private func setupPlayer() {
         do {
             // Configure audio session for playback
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
             
-            // Create a temporary file URL
-            let tempDirectory = FileManager.default.temporaryDirectory
-            let fileName = UUID().uuidString + ".mp4"
-            let tempURL = tempDirectory.appendingPathComponent(fileName)
+            // Create player directly from file URL - instant, no loading into memory!
+            let newPlayer = AVPlayer(url: videoURL)
+            self.player = newPlayer
+            newPlayer.play()
             
-            print("📹 Writing video to: \(tempURL.path)")
-            print("📹 Video data size: \(videoData.count) bytes")
-            
-            // Write video data to temporary file
-            try videoData.write(to: tempURL)
-            
-            print("✅ Video written successfully")
-            
-            // Create player on main thread
-            await MainActor.run {
-                self.videoURL = tempURL
-                let newPlayer = AVPlayer(url: tempURL)
-                self.player = newPlayer
-                
-                print("▶️ Player created, starting playback")
-                newPlayer.play()
-            }
+            print("▶️ Playing video directly from: \(videoURL.lastPathComponent)")
         } catch {
-            print("❌ Error loading video: \(error)")
+            print("❌ Error setting up audio session: \(error)")
         }
     }
     
     private func cleanup() {
-        print("🧹 Cleaning up video player")
         player?.pause()
         player = nil
-        
-        // Clean up temporary file
-        if let url = videoURL {
-            try? FileManager.default.removeItem(at: url)
-            print("🗑️ Removed temporary video file")
-            videoURL = nil
-        }
+        // Note: Don't delete the video file - it's permanent storage in Documents
     }
 }
-
-// MARK: - Video Data Wrapper
-struct VideoDataWrapper: Identifiable {
-    let id = UUID()
-    let data: Data
-}
-
-
-
-

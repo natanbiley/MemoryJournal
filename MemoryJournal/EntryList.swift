@@ -12,6 +12,24 @@ struct EntryList: View {
     @State private var showWelcomeSheet = false
     @State private var showFavoritesOnly = false
     
+    // Glass button style with fallback for iOS < 26
+    private var glassButtonStyle: some PrimitiveButtonStyle {
+        if #available(iOS 26.0, *) {
+            return AnyPrimitiveButtonStyle(.glass)
+        } else {
+            return AnyPrimitiveButtonStyle(.bordered)
+        }
+    }
+    
+    // Glass prominent button style with fallback for iOS < 26
+    private var glassProminentButtonStyle: some PrimitiveButtonStyle {
+        if #available(iOS 26.0, *) {
+            return AnyPrimitiveButtonStyle(.glassProminent)
+        } else {
+            return AnyPrimitiveButtonStyle(.borderedProminent)
+        }
+    }
+    
     // Filter entries based on search text
     private var filteredEntries: [Entry] {
         var result = entries
@@ -176,12 +194,12 @@ struct EntryList: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    if let videos = entry.videos, !videos.isEmpty {
+                    if let videoFilenames = entry.videoFilenames, !videoFilenames.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "video.fill")
                                 .font(.caption)
                                 .foregroundColor(.purple)
-                            Text("\(videos.count) video\(videos.count > 1 ? "s" : "")")
+                            Text("\(videoFilenames.count) video\(videoFilenames.count > 1 ? "s" : "")")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -247,7 +265,7 @@ struct EntryList: View {
                     Image(systemName: "info.circle")
                         .font(.title3)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(glassButtonStyle)
                 
                 Button(action: {
                     withAnimation {
@@ -258,7 +276,7 @@ struct EntryList: View {
                         .font(.title3)
                         .foregroundColor(showFavoritesOnly ? .red : .primary)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(glassButtonStyle)
             }
         }
         
@@ -279,7 +297,7 @@ struct EntryList: View {
                     Image(systemName: "heart.fill")
                 }
                 .foregroundColor(.red)
-                .buttonStyle(.glass)
+                .buttonStyle(glassButtonStyle)
             }
             
             ToolbarItem {
@@ -299,7 +317,7 @@ struct EntryList: View {
                     Image(systemName: "trash")
                 }
                 .foregroundColor(.red)
-                .buttonStyle(.glass)
+                .buttonStyle(glassButtonStyle)
             }
         }
         
@@ -334,7 +352,7 @@ struct EntryList: View {
                 }
                 .padding(.trailing, 20)
                 .padding(.bottom, 20)
-                .buttonStyle(.glassProminent)
+                .buttonStyle(glassProminentButtonStyle)
             }
         }
     }
@@ -449,6 +467,21 @@ struct WelcomeView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Button Style Wrapper
+struct AnyPrimitiveButtonStyle: PrimitiveButtonStyle {
+    private let _makeBody: (Configuration) -> AnyView
+    
+    init<S: PrimitiveButtonStyle>(_ style: S) {
+        _makeBody = { configuration in
+            AnyView(style.makeBody(configuration: configuration))
+        }
+    }
+    
+    func makeBody(configuration: Configuration) -> some View {
+        _makeBody(configuration)
     }
 }
 

@@ -127,7 +127,7 @@ struct SettingsView: View {
                 
                 // App Information
                 Section {
-                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Link(destination: URL(string: "https://natanbiley.github.io/MemoryJournal/")!) {
                         HStack {
                             Text("Privacy Policy")
                             Spacer()

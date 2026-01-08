@@ -4,7 +4,7 @@ import SwiftData
 struct ContentView: View {
     var body: some View {
         TabView {
-            Tab("Entries", systemImage: "book.badge.plus") {
+            Tab("Entries", systemImage: "book") {
                 EntryList()
             }
 
