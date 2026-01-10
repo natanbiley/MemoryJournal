@@ -50,59 +50,69 @@ struct EntryEditor: View {
         
         VStack(spacing: 0) {
             HStack {
+                // Left: Save button
                 Button(action: saveEntry) {
                     Image(systemName: "chevron.left")
                         .font(.title3)
                         .foregroundColor(.blue)
+                    Text("Save")
+                        .font(.headline)
+                        .foregroundColor(.blue)
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
-                // Navigation between entries (only when viewing an existing entry)
-                if store.selectedEntryID != nil {
-                    HStack(spacing: 20) {
-                        Button(action: navigateToPreviousEntry) {
-                            Image(systemName: "chevron.left")
-                                .font(.title3)
-                                .foregroundColor(store.getPreviousEntry(context: context) != nil ? .blue : .gray)
+                // Center: Date and navigation
+                HStack {
+                    if store.selectedEntryID != nil {
+                        HStack(spacing: 20) {
+                            Button(action: navigateToPreviousEntry) {
+                                Image(systemName: "chevron.left")
+                                    .font(.title3)
+                                    .foregroundColor(store.getPreviousEntry(context: context) != nil ? .blue : .gray)
+                            }
+                            .disabled(store.getPreviousEntry(context: context) == nil)
+                            
+                            if let entryDate = store.entryDate {
+                                Text(entryDate, format: .dateTime.month(.wide).day().year())
+                                    .font(.headline)
+                                    .bold()
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                            }
+                            
+                            Button(action: navigateToNextEntry) {
+                                Image(systemName: "chevron.right")
+                                    .font(.title3)
+                                    .foregroundColor(store.getNextEntry(context: context) != nil ? .blue : .gray)
+                            }
+                            .disabled(store.getNextEntry(context: context) == nil)
                         }
-                        .disabled(store.getPreviousEntry(context: context) == nil)
-                        
+                    } else {
+                        // Creating new entry - show date picker
                         if let entryDate = store.entryDate {
                             Text(entryDate, format: .dateTime.month(.wide).day().year())
                                 .font(.headline)
                                 .bold()
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        } else {
+                            Button("Select Date") {
+                                temporarySelectedDate = store.entryDate ?? Date()
+                                showDatePicker.toggle()
+                            }
+                            .buttonStyle(glassProminentButtonStyle)
                         }
-                        
-                        Button(action: navigateToNextEntry) {
-                            Image(systemName: "chevron.right")
-                                .font(.title3)
-                                .foregroundColor(store.getNextEntry(context: context) != nil ? .blue : .gray)
-                        }
-                        .disabled(store.getNextEntry(context: context) == nil)
-                    }
-                } else {
-                    // Creating new entry - show date picker
-                    if let entryDate = store.entryDate {
-                        Text(entryDate, format: .dateTime.month(.wide).day().year())
-                            .font(.headline)
-                            .bold()
-                    } else {
-                        Button("Select Date") {
-                            temporarySelectedDate = store.entryDate ?? Date()
-                            showDatePicker.toggle()
-                        }
-                        .buttonStyle(glassProminentButtonStyle)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
                 
-                Spacer()
-                
-                // Favorite button
+                // Right: Favorite button
                 Button(action: toggleFavorite) {
                     Image(systemName: isFavoriteEntry() ? "heart.fill" : "heart")
                         .font(.title3)
                         .foregroundColor(isFavoriteEntry() ? .red : .gray)
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }.padding()
                 .sheet(isPresented: $showDatePicker) {
                     DatePickerSheet(
@@ -219,9 +229,7 @@ struct EntryEditor: View {
                                     .contentShape(RoundedRectangle(cornerRadius: 8))
                                     .onTapGesture {
                                         selectedPhotoIndex = index
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                            showPhotoViewer = true
-                                        }
+                                        showPhotoViewer = true
                                     }
                                 
                                 Button(action: {
@@ -333,6 +341,8 @@ struct EntryEditor: View {
                 typingAttributes: $richTextManager.typingAttributes,
                 inputAccessoryView: createToolbarView()
             )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .onAppear {
                 loadInitialContent()
                 // Open date picker by default for new entries
@@ -477,6 +487,19 @@ struct EntryEditor: View {
         
         // Dismiss if no text, photos, or videos are entered
         guard !plainText.isEmpty || !photoData.isEmpty || !videoFilenames.isEmpty else {
+            // If editing an existing entry that now has no content, delete it and clean up videos
+            if let entryID = store.selectedEntryID {
+                if let existingEntry = context.model(for: entryID) as? Entry {
+                    // Clean up video files before deleting entry
+                    if let videoFilenames = existingEntry.videoFilenames {
+                        Task {
+                            await VideoStorageManager.shared.deleteVideos(filenames: videoFilenames)
+                        }
+                    }
+                    context.delete(existingEntry)
+                    try? context.save()
+                }
+            }
             store.dismissEditor()
             return
         }

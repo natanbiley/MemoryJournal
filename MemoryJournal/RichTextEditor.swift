@@ -24,8 +24,32 @@ struct RichTextEditor: UIViewRepresentable {
         textView.autocapitalizationType = .sentences
         textView.autocorrectionType = .yes
         
-        // Set input accessory view
-        textView.customInputAccessoryView = inputAccessoryView
+        // Create a container view to hold both toolbars
+        if let customAccessoryView = inputAccessoryView {
+            let containerView = UIView()
+            containerView.backgroundColor = .clear
+            containerView.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 94)
+            containerView.autoresizingMask = [.flexibleWidth]
+            
+            // Create Done button toolbar
+            let doneToolbar = UIToolbar()
+            doneToolbar.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44)
+            doneToolbar.autoresizingMask = [.flexibleWidth]
+            let flexSpace = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+            let doneButton = UIBarButtonItem(title: "Done", style: .done, target: textView, action: #selector(UIResponder.resignFirstResponder))
+            doneToolbar.items = [flexSpace, doneButton]
+            
+            // Add both toolbars to container
+            customAccessoryView.frame = CGRect(x: 0, y: 44, width: UIScreen.main.bounds.width, height: 50)
+            customAccessoryView.autoresizingMask = [.flexibleWidth]
+            
+            containerView.addSubview(doneToolbar)
+            containerView.addSubview(customAccessoryView)
+            
+            textView.customInputAccessoryView = containerView
+        } else {
+            textView.customInputAccessoryView = inputAccessoryView
+        }
         
         // Set initial attributed text
         textView.attributedText = attributedText
@@ -39,7 +63,39 @@ struct RichTextEditor: UIViewRepresentable {
     func updateUIView(_ uiView: UITextView, context: Context) {
         // Update input accessory view
         if let customTextView = uiView as? CustomTextView {
-            customTextView.customInputAccessoryView = inputAccessoryView
+            if let customAccessoryView = inputAccessoryView {
+                // Check if we need to create/update the container
+                let needsUpdate = customTextView.customInputAccessoryView == nil || 
+                                 !(customTextView.customInputAccessoryView?.subviews.contains(where: { $0 is UIToolbar }) ?? false)
+                
+                if needsUpdate {
+                    let containerView = UIView()
+                    containerView.backgroundColor = .clear
+                    containerView.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 94)
+                    containerView.autoresizingMask = [.flexibleWidth]
+                    
+                    // Create Done button toolbar
+                    let doneToolbar = UIToolbar()
+                    doneToolbar.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width, height: 44)
+                    doneToolbar.autoresizingMask = [.flexibleWidth]
+                    let flexSpace = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
+                    let doneButton = UIBarButtonItem(title: "Done", style: .done, target: uiView, action: #selector(UIResponder.resignFirstResponder))
+                    doneToolbar.items = [flexSpace, doneButton]
+                    
+                    // Add both toolbars to container
+                    customAccessoryView.frame = CGRect(x: 0, y: 44, width: UIScreen.main.bounds.width, height: 50)
+                    customAccessoryView.autoresizingMask = [.flexibleWidth]
+                    
+                    containerView.addSubview(doneToolbar)
+                    containerView.addSubview(customAccessoryView)
+                    
+                    customTextView.customInputAccessoryView = containerView
+                    customTextView.reloadInputViews()
+                }
+            } else {
+                customTextView.customInputAccessoryView = inputAccessoryView
+                customTextView.reloadInputViews()
+            }
         }
         
         // Update typing attributes
@@ -691,7 +747,59 @@ class RichTextManager: ObservableObject {
             return nil
         }
         
-        return RichTextManager(attributedText: attributedString)
+        // Normalize fonts to system default while preserving other attributes
+        let normalizedString = normalizeAttributedString(attributedString)
+        return RichTextManager(attributedText: normalizedString)
+    }
+    
+    // Normalize only default HTML fonts (Times New Roman) to system font while preserving user-selected custom fonts
+    private static func normalizeAttributedString(_ attributedString: NSAttributedString) -> NSAttributedString {
+        let mutableString = NSMutableAttributedString(attributedString: attributedString)
+        let fullRange = NSRange(location: 0, length: attributedString.length)
+        
+        mutableString.enumerateAttribute(.font, in: fullRange, options: []) { value, range, _ in
+            guard let currentFont = value as? UIFont else { return }
+            
+            // Check if this is a default HTML font that should be converted to system font
+            // Times New Roman is what HTML uses when system font is converted to HTML
+            let fontFamily = currentFont.familyName
+            let isDefaultHTMLFont = fontFamily == "Times New Roman" || 
+                                   fontFamily == "Times" ||
+                                   fontFamily == ".AppleSystemUIFont" ||
+                                   fontFamily == ".SF UI Text" ||
+                                   fontFamily == ".SFUI-Regular"
+            
+            // Only convert default HTML fonts back to system font
+            // Preserve user-selected custom fonts (Arial, Georgia, etc.)
+            guard isDefaultHTMLFont else { return }
+            
+            // Preserve the font size and traits (bold, italic)
+            let traits = currentFont.fontDescriptor.symbolicTraits
+            let pointSize = currentFont.pointSize
+            
+            // Create a system font with the same size and traits
+            var newFont: UIFont
+            if traits.contains(.traitBold) && traits.contains(.traitItalic) {
+                // Both bold and italic
+                newFont = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
+                if let descriptor = newFont.fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) {
+                    newFont = UIFont(descriptor: descriptor, size: pointSize)
+                }
+            } else if traits.contains(.traitBold) {
+                // Bold only
+                newFont = UIFont.systemFont(ofSize: pointSize, weight: .semibold)
+            } else if traits.contains(.traitItalic) {
+                // Italic only
+                newFont = UIFont.italicSystemFont(ofSize: pointSize)
+            } else {
+                // Regular
+                newFont = UIFont.systemFont(ofSize: pointSize)
+            }
+            
+            mutableString.addAttribute(.font, value: newFont, range: range)
+        }
+        
+        return mutableString
     }
 }
 
@@ -884,6 +992,18 @@ struct RichTextToolbar: View {
                     icon: "trash",
                     isActive: false,
                     action: { manager.clearFormatting() }
+                )
+                
+                Divider()
+                    .frame(height: 20)
+                
+                // Hide Keyboard
+                ToolbarButton(
+                    icon: "keyboard.chevron.compact.down",
+                    isActive: false,
+                    action: { 
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 )
             }
             .padding(.horizontal, 8)

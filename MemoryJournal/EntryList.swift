@@ -10,6 +10,7 @@ struct EntryList: View {
     @State private var editMode: EditMode = .inactive
     @State private var searchText = ""
     @State private var showWelcomeSheet = false
+    @State private var isWelcomeSheetDismissed = false
     @State private var showFavoritesOnly = false
     
     // Glass button style with fallback for iOS < 26
@@ -304,12 +305,20 @@ struct EntryList: View {
                 Button(role: .destructive) {
                     for entryID in selection {
                         if let entry = context.model(for: entryID) as? Entry {
+                            // Clean up video files before deleting entry
+                            if let videoFilenames = entry.videoFilenames {
+                                Task {
+                                    await VideoStorageManager.shared.deleteVideos(filenames: videoFilenames)
+                                }
+                            }
                             context.delete(entry)
                         }
                     }
                     selection.removeAll()
                     do {
                         try context.save()
+                        // Clean up any orphaned videos after bulk deletion
+                        cleanupOrphanedVideos()
                     } catch {
                         print("Error saving context after deletion: \(error)")
                     }
@@ -360,6 +369,17 @@ struct EntryList: View {
         }
     }
     
+    private func cleanupOrphanedVideos() {
+        Task {
+            // Collect all video filenames currently referenced by entries
+            let referencedFilenames = entries.compactMap { $0.videoFilenames }.flatMap { $0 }
+            let referencedSet = Set(referencedFilenames)
+            
+            // Clean up orphaned videos
+            await VideoStorageManager.shared.cleanupOrphanedVideos(referencedFilenames: referencedSet)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -385,12 +405,15 @@ struct EntryList: View {
                     .environment(store)
             }
             .sheet(isPresented: $showWelcomeSheet) {
-                WelcomeView()
+                WelcomeView(isWelcomeSheetDismissed: $isWelcomeSheetDismissed)
             }
             .onAppear {
-                if entries.isEmpty && searchText.isEmpty && !showFavoritesOnly {
+                if entries.isEmpty && searchText.isEmpty && !showFavoritesOnly && !isWelcomeSheetDismissed {
                     showWelcomeSheet = true
                 }
+            }
+            .onDisappear {
+                isWelcomeSheetDismissed = true
             }
         }
     }
@@ -399,6 +422,7 @@ struct EntryList: View {
 // Welcome Screen View
 struct WelcomeView: View {
     @Environment(\.dismiss) var dismiss
+    @Binding var isWelcomeSheetDismissed: Bool
     
     var body: some View {
         NavigationStack {
@@ -481,6 +505,7 @@ struct WelcomeView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
+                        isWelcomeSheetDismissed = true
                         dismiss()
                     }
                 }

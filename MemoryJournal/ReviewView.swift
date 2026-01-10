@@ -15,7 +15,7 @@ struct ReviewView: View {
     init() {
         let calendar = Calendar.current
         let currentYear = calendar.component(.year, from: Date())
-        _selectedYear = State(initialValue: currentYear - 1)
+        _selectedYear = State(initialValue: currentYear)
     }
     
     private var onThisDayEntries: [Entry] {
