@@ -172,31 +172,10 @@ class SubscriptionManager {
     }
     
     // MARK: - Feature Access Methods
-    
-    /// Check if user can add videos (premium only)
-    func canAddVideos() -> Bool {
-        return isPremium
-    }
-    
-    /// Check if user can add more photos
-    func canAddMorePhotos(currentCount: Int) -> Bool {
-        if isPremium {
-            return true
-        }
-        return currentCount < 5
-    }
-    
+
     /// Check if user can access review features
     func canAccessReviews() -> Bool {
         return isPremium
-    }
-    
-    /// Get remaining free photos
-    func remainingFreePhotos(currentCount: Int) -> Int {
-        if isPremium {
-            return Int.max
-        }
-        return max(0, 5 - currentCount)
     }
 }
 

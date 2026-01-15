@@ -115,9 +115,7 @@ struct ReviewView: View {
     }
     
     private func contentScore(for entry: Entry) -> Int {
-        let textLength = stripHTML(entry.bodyText).count
-        let photoCount = (entry.photos?.count ?? 0) * 100 // Weight photos heavily
-        return textLength + photoCount
+        return entry.bodyText.count
     }
     
     private var previousMonthName: String {
@@ -593,23 +591,13 @@ struct ReviewView: View {
         }
     }
     
-    private func stripHTML(_ html: String) -> String {
-        // Simple HTML stripping - remove tags but keep content
-        let pattern = "<[^>]+>"
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let range = NSRange(location: 0, length: html.utf16.count)
-            let strippedString = regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
-            return strippedString
-        }
-        return html
-    }
 }
 
 struct OnThisDayCard: View {
     let entry: Entry
     let store: EntryStore
     let context: ModelContext
-    
+
     private var yearsSince: Int {
         let calendar = Calendar.current
         let today = Date()
@@ -617,13 +605,7 @@ struct OnThisDayCard: View {
         let entryYear = calendar.component(.year, from: entry.date)
         return currentYear - entryYear
     }
-    
-    private var displayText: String {
-        // Always strip HTML from bodyText for consistent display
-        let text = entry.bodyText
-        return stripHTML(text)
-    }
-    
+
     var body: some View {
         Button {
             store.showEditor(for: entry.persistentModelID, context: context)
@@ -633,9 +615,9 @@ struct OnThisDayCard: View {
                     Text(entry.date, style: .date)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
+
                     Spacer()
-                    
+
                     Text("\(yearsSince) \(yearsSince == 1 ? "year" : "years") ago")
                         .font(.caption)
                         .foregroundStyle(.white)
@@ -645,28 +627,18 @@ struct OnThisDayCard: View {
                             Capsule()
                                 .fill(.blue.gradient)
                         )
-                    
+
                     if entry.isFavorite {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
                             .font(.caption)
                     }
                 }
-                
-                Text(displayText)
+
+                Text(entry.bodyText)
                     .font(.body)
                     .lineLimit(3)
                     .foregroundStyle(.primary)
-                
-                if let photos = entry.photos, !photos.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "photo")
-                            .font(.caption)
-                        Text("\(photos.count) \(photos.count == 1 ? "photo" : "photos")")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.secondary)
-                }
             }
             .padding()
             .background(
@@ -676,17 +648,6 @@ struct OnThisDayCard: View {
             )
         }
         .buttonStyle(.plain)
-    }
-    
-    private func stripHTML(_ html: String) -> String {
-        // Simple HTML stripping - remove tags but keep content
-        let pattern = "<[^>]+>"
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let range = NSRange(location: 0, length: html.utf16.count)
-            let strippedString = regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
-            return strippedString
-        }
-        return html
     }
 }
 
@@ -694,12 +655,7 @@ struct MonthReviewCard: View {
     let entry: Entry
     let store: EntryStore
     let context: ModelContext
-    
-    private var displayText: String {
-        let text = entry.bodyText
-        return stripHTML(text)
-    }
-    
+
     var body: some View {
         Button {
             store.showEditor(for: entry.persistentModelID, context: context)
@@ -709,48 +665,20 @@ struct MonthReviewCard: View {
                     Text(entry.date, style: .date)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
+
                     Spacer()
-                    
+
                     if entry.isFavorite {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(.red)
                             .font(.caption)
                     }
                 }
-                
-                Text(displayText)
+
+                Text(entry.bodyText)
                     .font(.body)
                     .lineLimit(4)
                     .foregroundStyle(.primary)
-                
-                if let photos = entry.photos, !photos.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(photos.prefix(3), id: \.self) { photoData in
-                                if let uiImage = UIImage(data: photoData) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 80, height: 80)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                }
-                            }
-                            
-                            if photos.count > 3 {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(.secondary.opacity(0.2))
-                                        .frame(width: 80, height: 80)
-                                    
-                                    Text("+\(photos.count - 3)")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
             }
             .padding()
             .background(
@@ -760,16 +688,6 @@ struct MonthReviewCard: View {
             )
         }
         .buttonStyle(.plain)
-    }
-    
-    private func stripHTML(_ html: String) -> String {
-        let pattern = "<[^>]+>"
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let range = NSRange(location: 0, length: html.utf16.count)
-            let strippedString = regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
-            return strippedString
-        }
-        return html
     }
 }
 
@@ -777,12 +695,7 @@ struct YearReviewCard: View {
     let entry: Entry
     let store: EntryStore
     let context: ModelContext
-    
-    private var displayText: String {
-        let text = entry.bodyText
-        return stripHTML(text)
-    }
-    
+
     var body: some View {
         Button {
             store.showEditor(for: entry.persistentModelID, context: context)
@@ -792,48 +705,20 @@ struct YearReviewCard: View {
                     Text(entry.date, style: .date)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
+
                     Spacer()
-                    
+
                     if entry.isFavorite {
                         Image(systemName: "heart.fill")
                             .foregroundStyle(.red)
                             .font(.caption)
                     }
                 }
-                
-                Text(displayText)
+
+                Text(entry.bodyText)
                     .font(.body)
                     .lineLimit(4)
                     .foregroundStyle(.primary)
-                
-                if let photos = entry.photos, !photos.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(photos.prefix(3), id: \.self) { photoData in
-                                if let uiImage = UIImage(data: photoData) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 80, height: 80)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                                }
-                            }
-                            
-                            if photos.count > 3 {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(.secondary.opacity(0.2))
-                                        .frame(width: 80, height: 80)
-                                    
-                                    Text("+\(photos.count - 3)")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                }
             }
             .padding()
             .background(
@@ -843,16 +728,6 @@ struct YearReviewCard: View {
             )
         }
         .buttonStyle(.plain)
-    }
-    
-    private func stripHTML(_ html: String) -> String {
-        let pattern = "<[^>]+>"
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let range = NSRange(location: 0, length: html.utf16.count)
-            let strippedString = regex.stringByReplacingMatches(in: html, options: [], range: range, withTemplate: "")
-            return strippedString
-        }
-        return html
     }
 }
 

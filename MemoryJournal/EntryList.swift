@@ -184,29 +184,6 @@ struct EntryList: View {
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .padding(.leading, 5)
-                HStack(spacing: 8) {
-                    if let photos = entry.photos, !photos.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "photo.fill")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            Text("\(photos.count) photo\(photos.count > 1 ? "s" : "")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    if let videoFilenames = entry.videoFilenames, !videoFilenames.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "video.fill")
-                                .font(.caption)
-                                .foregroundColor(.purple)
-                            Text("\(videoFilenames.count) video\(videoFilenames.count > 1 ? "s" : "")")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding(.leading, 5)
             }
             Spacer()
             if entry.isFavorite {
@@ -305,20 +282,12 @@ struct EntryList: View {
                 Button(role: .destructive) {
                     for entryID in selection {
                         if let entry = context.model(for: entryID) as? Entry {
-                            // Clean up video files before deleting entry
-                            if let videoFilenames = entry.videoFilenames {
-                                Task {
-                                    await VideoStorageManager.shared.deleteVideos(filenames: videoFilenames)
-                                }
-                            }
                             context.delete(entry)
                         }
                     }
                     selection.removeAll()
                     do {
                         try context.save()
-                        // Clean up any orphaned videos after bulk deletion
-                        cleanupOrphanedVideos()
                     } catch {
                         print("Error saving context after deletion: \(error)")
                     }
@@ -366,17 +335,6 @@ struct EntryList: View {
                 .padding(.bottom, 20)
                 .buttonStyle(glassProminentButtonStyle)
             }
-        }
-    }
-    
-    private func cleanupOrphanedVideos() {
-        Task {
-            // Collect all video filenames currently referenced by entries
-            let referencedFilenames = entries.compactMap { $0.videoFilenames }.flatMap { $0 }
-            let referencedSet = Set(referencedFilenames)
-            
-            // Clean up orphaned videos
-            await VideoStorageManager.shared.cleanupOrphanedVideos(referencedFilenames: referencedSet)
         }
     }
     
@@ -467,14 +425,7 @@ struct WelcomeView: View {
                             title: "Write about your day",
                             description: "What did you do? Who did you see? How did you feel? Write down funny moments, interactions, ideas, get creative and have fun!"
                         )
-                        
-                        FeatureRow(
-                            icon: "photo.on.rectangle",
-                            color: .green,
-                            title: "Add Photos & Videos",
-                            description: "Re-live your travels, events, get-togethers and special moments"
-                        )
-                        
+
                         FeatureRow(
                             icon: "heart.fill",
                             color: .red,
