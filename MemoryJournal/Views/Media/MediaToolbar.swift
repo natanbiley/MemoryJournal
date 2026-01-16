@@ -1,16 +1,12 @@
 import SwiftUI
 
 struct MediaToolbar: View {
-    let photoCount: Int
-    let videoCount: Int
-    let photoLimit: Int
-    let videoLimit: Int
     let onAddPhoto: () -> Void
     let onAddVideo: () -> Void
     let onDismissKeyboard: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 20) {
             photoButton
             videoButton
             Spacer()
@@ -23,30 +19,18 @@ struct MediaToolbar: View {
 
     private var photoButton: some View {
         Button(action: onAddPhoto) {
-            HStack(spacing: 4) {
-                Image(systemName: "photo")
-                    .font(.system(size: 16))
-                Text("\(photoCount)/\(photoLimit)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(photoCount >= photoLimit ? .secondary : .primary)
+            Image(systemName: "photo")
+                .font(.system(size: 18))
+                .foregroundStyle(.primary)
         }
-        .disabled(photoCount >= photoLimit)
     }
 
     private var videoButton: some View {
         Button(action: onAddVideo) {
-            HStack(spacing: 4) {
-                Image(systemName: "video")
-                    .font(.system(size: 16))
-                Text("\(videoCount)/\(videoLimit)")
-                    .font(.caption)
-                    .fontWeight(.medium)
-            }
-            .foregroundStyle(videoLimit == 0 || videoCount >= videoLimit ? .secondary : .primary)
+            Image(systemName: "video")
+                .font(.system(size: 18))
+                .foregroundStyle(.primary)
         }
-        .disabled(videoLimit == 0 || videoCount >= videoLimit)
     }
 
     private var dismissButton: some View {

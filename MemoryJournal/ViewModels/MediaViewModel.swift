@@ -35,22 +35,22 @@ class MediaViewModel {
     private let compressionService = MediaCompressionService.shared
     private let subscriptionManager = SubscriptionManager.shared
 
-    // MARK: - Limits
+    // MARK: - Limits (from SubscriptionManager)
 
     var photoLimit: Int {
-        subscriptionManager.isPremium ? 10 : 2
+        subscriptionManager.photoLimit
     }
 
     var videoLimit: Int {
-        subscriptionManager.isPremium ? 5 : 0
+        subscriptionManager.videoLimit
     }
 
     var canAddPhoto: Bool {
-        photos.count < photoLimit
+        subscriptionManager.canAddPhotos(currentCount: photos.count)
     }
 
     var canAddVideo: Bool {
-        videos.count < videoLimit
+        subscriptionManager.canAddVideos(currentCount: videos.count)
     }
 
     // MARK: - Load Media

@@ -309,6 +309,9 @@ struct EntryList: View {
                 Button(role: .destructive) {
                     for entryID in selection {
                         if let entry = context.model(for: entryID) as? Entry {
+                            // Delete media files from disk
+                            MediaStorageManager.shared.deleteAllMedia(for: entry.entryID)
+                            // Delete entry from SwiftData (cascade deletes MediaItem records)
                             context.delete(entry)
                         }
                     }

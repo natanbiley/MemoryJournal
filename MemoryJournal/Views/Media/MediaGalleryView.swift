@@ -33,6 +33,7 @@ struct MediaGalleryView: View {
                 .foregroundStyle(.white, .black.opacity(0.5))
         }
         .padding()
+        .padding(.top, 8)
     }
 
     private func configureAudioSession() {
@@ -78,9 +79,11 @@ struct MediaGalleryItemView: View {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ProgressView()
                 .tint(.white)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -88,7 +91,7 @@ struct MediaGalleryItemView: View {
     private var videoView: some View {
         if let player = player {
             VideoPlayer(player: player)
-                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onAppear {
                     if isVisible {
                         player.play()
@@ -97,6 +100,7 @@ struct MediaGalleryItemView: View {
         } else {
             ProgressView()
                 .tint(.white)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

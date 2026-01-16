@@ -109,6 +109,10 @@ struct EntryEditor: View {
                             store.entryDate = temporarySelectedDate
                             showDatePicker = false
                             checkForExistingEntry(on: temporarySelectedDate)
+                            // Auto-focus the text editor after date selection
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                isTextEditorFocused = true
+                            }
                         },
                         onAppear: {
                             loadDatesWithEntries()
@@ -206,10 +210,6 @@ struct EntryEditor: View {
                 // Media toolbar (above keyboard)
                 if isTextEditorFocused {
                     MediaToolbar(
-                        photoCount: mediaViewModel.photos.count,
-                        videoCount: mediaViewModel.videos.count,
-                        photoLimit: mediaViewModel.photoLimit,
-                        videoLimit: mediaViewModel.videoLimit,
                         onAddPhoto: {
                             if mediaViewModel.checkPhotoLimitAndShowPaywall() {
                                 showPhotoPicker = true
@@ -388,6 +388,9 @@ struct EntryEditor: View {
             // If editing an existing entry that now has no content, delete it
             if let entryID = store.selectedEntryID {
                 if let existingEntry = context.model(for: entryID) as? Entry {
+                    // Delete media files from disk
+                    MediaStorageManager.shared.deleteAllMedia(for: existingEntry.entryID)
+                    // Delete entry from SwiftData
                     context.delete(existingEntry)
                     try? context.save()
                 }
