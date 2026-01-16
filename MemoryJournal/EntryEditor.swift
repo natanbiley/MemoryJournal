@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct EntryEditor: View {
     @Environment(\.modelContext) private var context
@@ -13,6 +14,14 @@ struct EntryEditor: View {
     @State private var temporarySelectedDate: Date = Date()
     @State private var isNewEntryFavorite = false
     @State private var isNavigating = false
+
+    // Media state
+    @State private var mediaViewModel = MediaViewModel()
+    @State private var showPhotoPicker = false
+    @State private var showVideoPicker = false
+    @State private var photoPickerItems: [PhotosPickerItem] = []
+    @State private var videoPickerItems: [PhotosPickerItem] = []
+    @FocusState private var isTextEditorFocused: Bool
     
     // Glass prominent button style with fallback for iOS < 26
     private var glassProminentButtonStyle: some PrimitiveButtonStyle {
@@ -136,26 +145,233 @@ struct EntryEditor: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(uiColor: .systemBackground))
             } else {
-            Divider()
+                Divider()
 
-            // Simple text editor
-            TextEditor(text: $entryText)
-                .font(.body)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .onAppear {
-                    loadInitialContent()
-                    // Open date picker by default for new entries
-                    if store.selectedEntryID == nil && store.entryDate == nil {
-                        temporarySelectedDate = Date()
-                        showDatePicker = true
+                // Media sections (above text editor)
+                VStack(spacing: 0) {
+                    // Photo row
+                    if !mediaViewModel.photos.isEmpty {
+                        MediaScrollRow(
+                            mediaItems: mediaViewModel.photos,
+                            mediaType: .photo,
+                            onTap: { item in
+                                mediaViewModel.openGallery(for: item)
+                            },
+                            onDelete: { item in
+                                if let entry = currentEntry {
+                                    mediaViewModel.deleteMedia(item: item, entry: entry, context: context)
+                                }
+                            }
+                        )
+                    }
+
+                    // Video row
+                    if !mediaViewModel.videos.isEmpty {
+                        MediaScrollRow(
+                            mediaItems: mediaViewModel.videos,
+                            mediaType: .video,
+                            onTap: { item in
+                                mediaViewModel.openGallery(for: item)
+                            },
+                            onDelete: { item in
+                                if let entry = currentEntry {
+                                    mediaViewModel.deleteMedia(item: item, entry: entry, context: context)
+                                }
+                            }
+                        )
                     }
                 }
-                .onChange(of: store.selectedEntryID) { oldValue, newValue in
-                    // Reload content when editing an entry
-                    loadInitialContent()
+
+                // Text editor
+                TextEditor(text: $entryText)
+                    .font(.body)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .focused($isTextEditorFocused)
+                    .onAppear {
+                        loadInitialContent()
+                        loadMedia()
+                        // Open date picker by default for new entries
+                        if store.selectedEntryID == nil && store.entryDate == nil {
+                            temporarySelectedDate = Date()
+                            showDatePicker = true
+                        }
+                    }
+                    .onChange(of: store.selectedEntryID) { oldValue, newValue in
+                        // Reload content when editing an entry
+                        loadInitialContent()
+                        loadMedia()
+                    }
+
+                // Media toolbar (above keyboard)
+                if isTextEditorFocused {
+                    MediaToolbar(
+                        photoCount: mediaViewModel.photos.count,
+                        videoCount: mediaViewModel.videos.count,
+                        photoLimit: mediaViewModel.photoLimit,
+                        videoLimit: mediaViewModel.videoLimit,
+                        onAddPhoto: {
+                            if mediaViewModel.checkPhotoLimitAndShowPaywall() {
+                                showPhotoPicker = true
+                            }
+                        },
+                        onAddVideo: {
+                            if mediaViewModel.checkVideoLimitAndShowPaywall() {
+                                showVideoPicker = true
+                            }
+                        },
+                        onDismissKeyboard: {
+                            isTextEditorFocused = false
+                        }
+                    )
                 }
             }
+        }
+        // Photo picker
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $photoPickerItems,
+            maxSelectionCount: max(0, mediaViewModel.photoLimit - mediaViewModel.photos.count),
+            matching: .images
+        )
+        .onChange(of: photoPickerItems) { oldValue, newValue in
+            handlePhotoSelection(newValue)
+            photoPickerItems = []
+        }
+        // Video picker
+        .photosPicker(
+            isPresented: $showVideoPicker,
+            selection: $videoPickerItems,
+            maxSelectionCount: max(0, mediaViewModel.videoLimit - mediaViewModel.videos.count),
+            matching: .videos
+        )
+        .onChange(of: videoPickerItems) { oldValue, newValue in
+            handleVideoSelection(newValue)
+            videoPickerItems = []
+        }
+        // Gallery
+        .fullScreenCover(isPresented: $mediaViewModel.showGallery) {
+            MediaGalleryView(
+                mediaItems: mediaViewModel.galleryItems,
+                selectedIndex: $mediaViewModel.selectedGalleryIndex
+            )
+        }
+        // Paywall
+        .sheet(isPresented: $mediaViewModel.showPaywall) {
+            PaywallView()
+        }
+    }
+
+    // MARK: - Current Entry Helper
+
+    private var currentEntry: Entry? {
+        guard let entryID = store.selectedEntryID else { return nil }
+        return context.model(for: entryID) as? Entry
+    }
+
+    // MARK: - Media Loading
+
+    private func loadMedia() {
+        mediaViewModel.loadMedia(from: currentEntry)
+    }
+
+    // MARK: - Photo Selection Handler
+
+    private func handlePhotoSelection(_ items: [PhotosPickerItem]) {
+        let viewModel = mediaViewModel
+        let ctx = context
+
+        guard let entry = currentEntry else {
+            // For new entries, we need to save first
+            saveEntryWithoutDismissingAndGetEntry { savedEntry in
+                for item in items {
+                    item.loadTransferable(type: Data.self) { result in
+                        if case .success(let data) = result, let data = data,
+                           let image = UIImage(data: data) {
+                            Task { @MainActor in
+                                viewModel.processAndSavePhotoDirectly(
+                                    image: image,
+                                    entry: savedEntry,
+                                    context: ctx
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            return
+        }
+
+        for item in items {
+            item.loadTransferable(type: Data.self) { result in
+                if case .success(let data) = result, let data = data,
+                   let image = UIImage(data: data) {
+                    Task { @MainActor in
+                        viewModel.processAndSavePhotoDirectly(
+                            image: image,
+                            entry: entry,
+                            context: ctx
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Video Selection Handler
+
+    private func handleVideoSelection(_ items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+
+        guard let entry = currentEntry else {
+            // For new entries, we need to save first
+            saveEntryWithoutDismissingAndGetEntry { savedEntry in
+                for item in items {
+                    loadAndProcessVideo(item: item, entry: savedEntry)
+                }
+            }
+            return
+        }
+
+        for item in items {
+            loadAndProcessVideo(item: item, entry: entry)
+        }
+    }
+
+    private func loadAndProcessVideo(item: PhotosPickerItem, entry: Entry) {
+        let viewModel = mediaViewModel
+        let ctx = context
+
+        item.loadTransferable(type: VideoTransferable.self) { result in
+            if case .success(let video) = result, let video = video {
+                Task { @MainActor in
+                    await viewModel.processAndSaveVideoDirectly(
+                        tempURL: video.url,
+                        entry: entry,
+                        context: ctx
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Save Entry and Get Reference
+
+    private func saveEntryWithoutDismissingAndGetEntry(completion: @escaping (Entry) -> Void) {
+        let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let textToSave = plainText.isEmpty ? " " : plainText
+
+        guard let date = store.entryDate else { return }
+
+        let newEntry = Entry(bodyText: textToSave, date: date, isFavorite: isNewEntryFavorite)
+        context.insert(newEntry)
+
+        do {
+            try context.save()
+            store.selectedEntryID = newEntry.persistentModelID
+            completion(newEntry)
+        } catch {
+            print("Error saving entry: \(error)")
         }
     }
 

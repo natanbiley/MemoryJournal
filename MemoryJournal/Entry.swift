@@ -6,11 +6,30 @@ class Entry {
     var bodyText: String
     var date: Date
     var isFavorite: Bool = false
+    var entryID: UUID = UUID()
 
-    init (bodyText: String, date: Date, isFavorite: Bool = false) {
+    @Relationship(deleteRule: .cascade)
+    var mediaItems: [MediaItem] = []
+
+    init(bodyText: String, date: Date, isFavorite: Bool = false) {
         self.bodyText = bodyText
         self.date = date
         self.isFavorite = isFavorite
+        self.entryID = UUID()
+    }
+
+    // MARK: - Media Helpers
+
+    var photos: [MediaItem] {
+        mediaItems
+            .filter { $0.mediaType == .photo }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    var videos: [MediaItem] {
+        mediaItems
+            .filter { $0.mediaType == .video }
+            .sorted { $0.sortOrder < $1.sortOrder }
     }
 
     static let sampleEntries = [

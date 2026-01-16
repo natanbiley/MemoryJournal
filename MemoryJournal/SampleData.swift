@@ -11,7 +11,7 @@ class SampleData {
     }
     
     private init() {
-        let schema = Schema([Entry.self]);
+        let schema = Schema([Entry.self, MediaItem.self]);
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true);
 
         do {

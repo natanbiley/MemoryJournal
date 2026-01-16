@@ -176,7 +176,7 @@ struct EntryList: View {
     
     @ViewBuilder
     private func entryRowView(_ entry: Entry) -> some View {
-        HStack{
+        HStack {
             Text(entry.date, format: .dateTime.day()).bold().frame(width: 30)
             Divider()
             VStack(alignment: .leading, spacing: 4) {
@@ -184,6 +184,33 @@ struct EntryList: View {
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .padding(.leading, 5)
+
+                // Media count footer
+                if !entry.photos.isEmpty || !entry.videos.isEmpty {
+                    HStack(spacing: 8) {
+                        if !entry.photos.isEmpty {
+                            HStack(spacing: 2) {
+                                    Image(systemName: "photo")
+                                        .font(.caption2)
+                                        .foregroundColor(.blue)
+                                Text("\(entry.photos.count) photos")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                        if !entry.videos.isEmpty {
+                            HStack(spacing: 2) {
+                                    Image(systemName: "video.fill")
+                                        .font(.caption2)
+                                        .foregroundColor(.purple)
+                                Text("\(entry.videos.count) videos")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.leading, 5)
+                }
             }
             Spacer()
             if entry.isFavorite {
@@ -415,7 +442,7 @@ struct WelcomeView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
                     }
-                    .padding(.top, 40)
+                    .padding(.top, 0)
                     
                     // Features List
                     VStack(alignment: .leading, spacing: 24) {
@@ -424,6 +451,13 @@ struct WelcomeView: View {
                             color: .blue,
                             title: "Write about your day",
                             description: "What did you do? Who did you see? How did you feel? Write down funny moments, interactions, ideas, get creative and have fun!"
+                        )
+
+                        FeatureRow(
+                            icon: "photo.on.rectangle.angled",
+                            color: .green,
+                            title: "Add Photos & Videos",
+                            description: "Capture your memories visually by attaching photos and videos to your entries"
                         )
 
                         FeatureRow(
@@ -436,8 +470,14 @@ struct WelcomeView: View {
                         FeatureRow(
                             icon: "calendar",
                             color: .orange,
-                            title: "Review your Highlights from the past",
-                            description: "Get monthly and yearly summaries of your favorite memories"
+                            title: "Review Highlights from the past",
+                            description: "Get monthly and yearly reminders of your favorite memories"
+                        )
+                        FeatureRow(
+                            icon: "shield.checkerboard",
+                            color: .purple,
+                            title: "Data Privacy",
+                            description: "All your data is private and stored only on your device"
                         )
                         FeatureRow(
                             icon: "plus.circle.fill",

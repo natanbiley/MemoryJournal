@@ -4,7 +4,7 @@ import SwiftData
 struct MemoryJournalApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView().modelContainer(for: [Entry.self])
+            ContentView().modelContainer(for: [Entry.self, MediaItem.self])
         }
     }
 }

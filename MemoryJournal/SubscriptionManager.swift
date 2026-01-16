@@ -177,6 +177,24 @@ class SubscriptionManager {
     func canAccessReviews() -> Bool {
         return isPremium
     }
+
+    // MARK: - Media Limits
+
+    var photoLimit: Int {
+        isPremium ? 10 : 2
+    }
+
+    var videoLimit: Int {
+        isPremium ? 5 : 0
+    }
+
+    func canAddPhotos(currentCount: Int) -> Bool {
+        return currentCount < photoLimit
+    }
+
+    func canAddVideos(currentCount: Int) -> Bool {
+        return currentCount < videoLimit
+    }
 }
 
 // MARK: - Store Errors
