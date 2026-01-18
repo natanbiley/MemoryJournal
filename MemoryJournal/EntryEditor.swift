@@ -368,6 +368,8 @@ struct EntryEditor: View {
 
         do {
             try context.save()
+            // Update store.entryText so loadInitialContent doesn't wipe out the text
+            store.entryText = textToSave
             store.selectedEntryID = newEntry.persistentModelID
             completion(newEntry)
         } catch {
@@ -382,9 +384,10 @@ struct EntryEditor: View {
     
     private func saveEntry() {
         let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasMedia = !mediaViewModel.photos.isEmpty || !mediaViewModel.videos.isEmpty
 
-        // Dismiss if no text is entered
-        guard !plainText.isEmpty else {
+        // If no text and no media, dismiss without saving (or delete if editing existing)
+        guard !plainText.isEmpty || hasMedia else {
             // If editing an existing entry that now has no content, delete it
             if let entryID = store.selectedEntryID {
                 if let existingEntry = context.model(for: entryID) as? Entry {
@@ -515,9 +518,10 @@ struct EntryEditor: View {
     
     private func saveEntryWithoutDismissing() {
         let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasMedia = !mediaViewModel.photos.isEmpty || !mediaViewModel.videos.isEmpty
 
-        // Don't save if no text
-        guard !plainText.isEmpty else {
+        // Don't save if no text and no media
+        guard !plainText.isEmpty || hasMedia else {
             return
         }
 
