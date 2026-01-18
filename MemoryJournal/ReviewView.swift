@@ -4,14 +4,16 @@ import SwiftData
 struct ReviewView: View {
     @Query(sort: \Entry.date, order: .reverse) private var allEntries: [Entry]
     @Environment(\.modelContext) private var context
-    @State private var store = EntryStore()
     private var subscriptionManager = SubscriptionManager.shared
     @State private var showPaywall = false
     @State private var selectedYear: Int
     @State private var isOnThisDayExpanded = true
     @State private var isMonthReviewExpanded = true
     @State private var isYearReviewExpanded = true
-    
+
+    // Editor presentation state - using wrapper for fullScreenCover(item:)
+    @State private var editorPresentation: EditorPresentation?
+
     init() {
         let calendar = Calendar.current
         let currentYear = calendar.component(.year, from: Date())
@@ -291,8 +293,10 @@ struct ReviewView: View {
                             
                             if !onThisDayEntries.isEmpty {
                                 ForEach(onThisDayEntries) { entry in
-                                    OnThisDayCard(entry: entry, store: store, context: context)
-                                        .padding(.horizontal)
+                                    OnThisDayCard(entry: entry) {
+                                        editorPresentation = EditorPresentation(entryID: entry.persistentModelID)
+                                    }
+                                    .padding(.horizontal)
                                 }
                             } else {
                                 VStack(spacing: 12) {
@@ -368,8 +372,10 @@ struct ReviewView: View {
                             
                             if !lastMonthEntries.isEmpty {
                                 ForEach(lastMonthEntries) { entry in
-                                    MonthReviewCard(entry: entry, store: store, context: context)
-                                        .padding(.horizontal)
+                                    MonthReviewCard(entry: entry) {
+                                        editorPresentation = EditorPresentation(entryID: entry.persistentModelID)
+                                    }
+                                    .padding(.horizontal)
                                 }
                             } else {
                                 VStack(spacing: 12) {
@@ -521,8 +527,10 @@ struct ReviewView: View {
                             
                             if !lastYearEntries.isEmpty {
                                 ForEach(lastYearEntries) { entry in
-                                    YearReviewCard(entry: entry, store: store, context: context)
-                                        .padding(.horizontal)
+                                    YearReviewCard(entry: entry) {
+                                        editorPresentation = EditorPresentation(entryID: entry.persistentModelID)
+                                    }
+                                    .padding(.horizontal)
                                 }
                             } else {
                                 VStack(spacing: 12) {
@@ -581,9 +589,8 @@ struct ReviewView: View {
                 }
             }
             .navigationTitle("Review")
-            .sheet(isPresented: $store.isShowingEditor) {
-                EntryEditor()
-                    .environment(store)
+            .fullScreenCover(item: $editorPresentation) { presentation in
+                EntryEditor(initialEntryID: presentation.entryID)
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
@@ -595,8 +602,7 @@ struct ReviewView: View {
 
 struct OnThisDayCard: View {
     let entry: Entry
-    let store: EntryStore
-    let context: ModelContext
+    let onTap: () -> Void
 
     private var yearsSince: Int {
         let calendar = Calendar.current
@@ -608,7 +614,7 @@ struct OnThisDayCard: View {
 
     var body: some View {
         Button {
-            store.showEditor(for: entry.persistentModelID, context: context)
+            onTap()
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -653,12 +659,11 @@ struct OnThisDayCard: View {
 
 struct MonthReviewCard: View {
     let entry: Entry
-    let store: EntryStore
-    let context: ModelContext
+    let onTap: () -> Void
 
     var body: some View {
         Button {
-            store.showEditor(for: entry.persistentModelID, context: context)
+            onTap()
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -693,12 +698,11 @@ struct MonthReviewCard: View {
 
 struct YearReviewCard: View {
     let entry: Entry
-    let store: EntryStore
-    let context: ModelContext
+    let onTap: () -> Void
 
     var body: some View {
         Button {
-            store.showEditor(for: entry.persistentModelID, context: context)
+            onTap()
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {

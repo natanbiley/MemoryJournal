@@ -4,9 +4,17 @@ import PhotosUI
 
 struct EntryEditor: View {
     @Environment(\.modelContext) private var context
-    @Environment(EntryStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
 
+    /// The entry ID to edit, or nil for a new entry
+    let initialEntryID: PersistentIdentifier?
+
+    // Internal state for navigation between entries
+    @State private var currentEntryID: PersistentIdentifier?
+
+    // Local edit state
     @State private var entryText = ""
+    @State private var entryDate: Date?
     @State private var showDatePicker = false
     @State private var showDateConflictAlert = false
     @State private var conflictingEntry: Entry?
@@ -14,6 +22,7 @@ struct EntryEditor: View {
     @State private var temporarySelectedDate: Date = Date()
     @State private var isNewEntryFavorite = false
     @State private var isNavigating = false
+    @State private var hasInitialized = false
 
     // Media state
     @State private var mediaViewModel = MediaViewModel()
@@ -22,7 +31,7 @@ struct EntryEditor: View {
     @State private var photoPickerItems: [PhotosPickerItem] = []
     @State private var videoPickerItems: [PhotosPickerItem] = []
     @FocusState private var isTextEditorFocused: Bool
-    
+
     // Glass prominent button style with fallback for iOS < 26
     private var glassProminentButtonStyle: some PrimitiveButtonStyle {
         if #available(iOS 26.0, *) {
@@ -31,10 +40,8 @@ struct EntryEditor: View {
             return AnyPrimitiveButtonStyle(.borderedProminent)
         }
     }
-    
+
     var body: some View {
-        @Bindable var store = store
-        
         VStack(spacing: 0) {
             HStack {
                 // Left: Save button
@@ -47,44 +54,44 @@ struct EntryEditor: View {
                         .foregroundColor(.blue)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 // Center: Date and navigation
                 HStack {
-                    if store.selectedEntryID != nil {
+                    if currentEntryID != nil {
                         HStack(spacing: 20) {
                             Button(action: navigateToPreviousEntry) {
                                 Image(systemName: "chevron.left")
                                     .font(.title3)
-                                    .foregroundColor(store.getPreviousEntry(context: context) != nil ? .blue : .gray)
+                                    .foregroundColor(getPreviousEntry() != nil ? .blue : .gray)
                             }
-                            .disabled(store.getPreviousEntry(context: context) == nil)
-                            
-                            if let entryDate = store.entryDate {
-                                Text(entryDate, format: .dateTime.month(.abbreviated).day().year())
+                            .disabled(getPreviousEntry() == nil)
+
+                            if let date = entryDate {
+                                Text(date, format: .dateTime.month(.abbreviated).day().year())
                                     .font(.headline)
                                     .bold()
                                     .lineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
                             }
-                            
+
                             Button(action: navigateToNextEntry) {
                                 Image(systemName: "chevron.right")
                                     .font(.title3)
-                                    .foregroundColor(store.getNextEntry(context: context) != nil ? .blue : .gray)
+                                    .foregroundColor(getNextEntry() != nil ? .blue : .gray)
                             }
-                            .disabled(store.getNextEntry(context: context) == nil)
+                            .disabled(getNextEntry() == nil)
                         }
                     } else {
                         // Creating new entry - show date picker
-                        if let entryDate = store.entryDate {
-                            Text(entryDate, format: .dateTime.month(.abbreviated).day().year())
+                        if let date = entryDate {
+                            Text(date, format: .dateTime.month(.abbreviated).day().year())
                                 .font(.headline)
                                 .bold()
                                 .lineLimit(1)
                                 .fixedSize(horizontal: true, vertical: false)
                         } else {
                             Button("Select Date") {
-                                temporarySelectedDate = store.entryDate ?? Date()
+                                temporarySelectedDate = entryDate ?? Date()
                                 showDatePicker.toggle()
                             }
                             .buttonStyle(glassProminentButtonStyle)
@@ -92,7 +99,7 @@ struct EntryEditor: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                
+
                 // Right: Favorite button
                 Button(action: toggleFavorite) {
                     Image(systemName: isFavoriteEntry() ? "heart.fill" : "heart")
@@ -106,7 +113,7 @@ struct EntryEditor: View {
                         temporarySelectedDate: $temporarySelectedDate,
                         datesWithEntries: datesWithEntries,
                         onDone: {
-                            store.entryDate = temporarySelectedDate
+                            entryDate = temporarySelectedDate
                             showDatePicker = false
                             checkForExistingEntry(on: temporarySelectedDate)
                             // Auto-focus the text editor after date selection
@@ -122,16 +129,17 @@ struct EntryEditor: View {
                 .alert("Date Already Has Entry", isPresented: $showDateConflictAlert) {
                     Button("Edit Existing Entry", role: .destructive) {
                         if let existingEntry = conflictingEntry {
-                            store.showEditor(for: existingEntry.persistentModelID, context: context)
+                            currentEntryID = existingEntry.persistentModelID
+                            loadContent()
                         }
                     }
                     Button("Cancel", role: .cancel) {
-                        store.entryDate = nil
+                        entryDate = nil
                     }
                 } message: {
                     Text("This date already has an entry. Would you like to edit it?")
                 }
-            
+
             // Show loading view during navigation
             if isNavigating {
                 VStack {
@@ -192,20 +200,6 @@ struct EntryEditor: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .focused($isTextEditorFocused)
-                    .onAppear {
-                        loadInitialContent()
-                        loadMedia()
-                        // Open date picker by default for new entries
-                        if store.selectedEntryID == nil && store.entryDate == nil {
-                            temporarySelectedDate = Date()
-                            showDatePicker = true
-                        }
-                    }
-                    .onChange(of: store.selectedEntryID) { oldValue, newValue in
-                        // Reload content when editing an entry
-                        loadInitialContent()
-                        loadMedia()
-                    }
 
                 // Media toolbar (above keyboard)
                 if isTextEditorFocused {
@@ -260,13 +254,102 @@ struct EntryEditor: View {
         .sheet(isPresented: $mediaViewModel.showPaywall) {
             PaywallView()
         }
+        .onAppear {
+            guard !hasInitialized else { return }
+            hasInitialized = true
+            currentEntryID = initialEntryID
+            loadContent()
+            loadMedia()
+            // Open date picker by default for new entries
+            if currentEntryID == nil && entryDate == nil {
+                temporarySelectedDate = Date()
+                showDatePicker = true
+            }
+        }
+        .onChange(of: currentEntryID) { oldValue, newValue in
+            // Reload content when navigating between entries
+            loadContent()
+            loadMedia()
+        }
     }
 
     // MARK: - Current Entry Helper
 
     private var currentEntry: Entry? {
-        guard let entryID = store.selectedEntryID else { return nil }
+        guard let entryID = currentEntryID else { return nil }
         return context.model(for: entryID) as? Entry
+    }
+
+    // MARK: - Navigation Helpers
+
+    private func getPreviousEntry() -> Entry? {
+        guard let currentEntryID = currentEntryID,
+              context.model(for: currentEntryID) as? Entry != nil else {
+            return nil
+        }
+
+        let descriptor = FetchDescriptor<Entry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+
+        do {
+            let allEntries = try context.fetch(descriptor)
+            guard let currentIndex = allEntries.firstIndex(where: { $0.persistentModelID == currentEntryID }) else {
+                return nil
+            }
+
+            let previousIndex = currentIndex + 1
+            guard previousIndex < allEntries.count else {
+                return nil
+            }
+
+            return allEntries[previousIndex]
+        } catch {
+            print("Error fetching entries: \(error)")
+            return nil
+        }
+    }
+
+    private func getNextEntry() -> Entry? {
+        guard let currentEntryID = currentEntryID,
+              context.model(for: currentEntryID) as? Entry != nil else {
+            return nil
+        }
+
+        let descriptor = FetchDescriptor<Entry>(
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+
+        do {
+            let allEntries = try context.fetch(descriptor)
+            guard let currentIndex = allEntries.firstIndex(where: { $0.persistentModelID == currentEntryID }) else {
+                return nil
+            }
+
+            let nextIndex = currentIndex - 1
+            guard nextIndex >= 0 else {
+                return nil
+            }
+
+            return allEntries[nextIndex]
+        } catch {
+            print("Error fetching entries: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - Content Loading
+
+    private func loadContent() {
+        isNewEntryFavorite = false
+
+        if let entry = currentEntry {
+            entryText = entry.bodyText
+            entryDate = entry.date
+        } else {
+            entryText = ""
+            entryDate = nil
+        }
     }
 
     // MARK: - Media Loading
@@ -282,7 +365,6 @@ struct EntryEditor: View {
         let ctx = context
 
         guard let entry = currentEntry else {
-            // For new entries, we need to save first
             saveEntryWithoutDismissingAndGetEntry { savedEntry in
                 for item in items {
                     item.loadTransferable(type: Data.self) { result in
@@ -324,7 +406,6 @@ struct EntryEditor: View {
         guard !items.isEmpty else { return }
 
         guard let entry = currentEntry else {
-            // For new entries, we need to save first
             saveEntryWithoutDismissingAndGetEntry { savedEntry in
                 for item in items {
                     loadAndProcessVideo(item: item, entry: savedEntry)
@@ -361,86 +442,73 @@ struct EntryEditor: View {
         let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let textToSave = plainText.isEmpty ? " " : plainText
 
-        guard let date = store.entryDate else { return }
+        guard let date = entryDate else { return }
 
         let newEntry = Entry(bodyText: textToSave, date: date, isFavorite: isNewEntryFavorite)
         context.insert(newEntry)
 
         do {
             try context.save()
-            // Update store.entryText so loadInitialContent doesn't wipe out the text
-            store.entryText = textToSave
-            store.selectedEntryID = newEntry.persistentModelID
+            currentEntryID = newEntry.persistentModelID
             completion(newEntry)
         } catch {
             print("Error saving entry: \(error)")
         }
     }
 
-    private func loadInitialContent() {
-        isNewEntryFavorite = false
-        entryText = store.entryText
-    }
-    
     private func saveEntry() {
         let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMedia = !mediaViewModel.photos.isEmpty || !mediaViewModel.videos.isEmpty
 
         // If no text and no media, dismiss without saving (or delete if editing existing)
         guard !plainText.isEmpty || hasMedia else {
-            // If editing an existing entry that now has no content, delete it
-            if let entryID = store.selectedEntryID {
+            if let entryID = currentEntryID {
                 if let existingEntry = context.model(for: entryID) as? Entry {
-                    // Delete media files from disk
                     MediaStorageManager.shared.deleteAllMedia(for: existingEntry.entryID)
-                    // Delete entry from SwiftData
                     context.delete(existingEntry)
                     try? context.save()
                 }
             }
-            store.dismissEditor()
+            dismiss()
             return
         }
 
         // Don't save if no date is selected
-        guard let date = store.entryDate else {
+        guard let date = entryDate else {
             return
         }
 
-        if let entryID = store.selectedEntryID {
+        if let entryID = currentEntryID {
             let existingEntry = context.model(for: entryID) as? Entry
             if let existingEntry = existingEntry {
-                // Update existing entry
                 existingEntry.bodyText = plainText
                 existingEntry.date = date
             }
         } else {
-            // Create new entry
             let newEntry = Entry(bodyText: plainText, date: date, isFavorite: isNewEntryFavorite)
             context.insert(newEntry)
         }
 
-        // Save the context
         do {
             try context.save()
         } catch {
             print("Error saving entry: \(error)")
         }
 
-        store.dismissEditor()
+        dismiss()
     }
-    
+
     private func checkForExistingEntry(on date: Date) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        
+
         let descriptor = FetchDescriptor<Entry>(
             predicate: #Predicate<Entry> { entry in
                 entry.date >= startOfDay && entry.date < endOfDay
             }
         )
-        
+
         do {
             let results = try context.fetch(descriptor)
             if let existingEntry = results.first {
@@ -451,20 +519,10 @@ struct EntryEditor: View {
             print("Error fetching entries: \(error)")
         }
     }
-    
-    private func isEditingCurrentEntry(date: Date) -> Bool {
-        guard let entryID = store.selectedEntryID,
-              let currentEntry = context.model(for: entryID) as? Entry else {
-            return false
-        }
-        
-        let calendar = Calendar.current
-        return calendar.isDate(currentEntry.date, inSameDayAs: date)
-    }
-    
+
     private func loadDatesWithEntries() {
         let descriptor = FetchDescriptor<Entry>()
-        
+
         do {
             let entries = try context.fetch(descriptor)
             let calendar = Calendar.current
@@ -473,109 +531,85 @@ struct EntryEditor: View {
             print("Error loading dates with entries: \(error)")
         }
     }
-    
+
     private func navigateToPreviousEntry() {
-        guard let previousEntry = store.getPreviousEntry(context: context) else {
+        guard let previousEntry = getPreviousEntry() else {
             return
         }
-        
-        // Show loading overlay
+
         isNavigating = true
-        
-        // Save current entry before navigating
         saveEntryWithoutDismissing()
-        
-        // Load the previous entry
-        store.showEditor(for: previousEntry.persistentModelID, context: context)
-        loadInitialContent()
-        
-        // Hide loading overlay after content loads
+        currentEntryID = previousEntry.persistentModelID
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isNavigating = false
         }
     }
-    
+
     private func navigateToNextEntry() {
-        guard let nextEntry = store.getNextEntry(context: context) else {
+        guard let nextEntry = getNextEntry() else {
             return
         }
-        
-        // Show loading overlay
+
         isNavigating = true
-        
-        // Save current entry before navigating
         saveEntryWithoutDismissing()
-        
-        // Load the next entry
-        store.showEditor(for: nextEntry.persistentModelID, context: context)
-        loadInitialContent()
-        
-        // Hide loading overlay after content loads
+        currentEntryID = nextEntry.persistentModelID
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isNavigating = false
         }
     }
-    
+
     private func saveEntryWithoutDismissing() {
         let plainText = entryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMedia = !mediaViewModel.photos.isEmpty || !mediaViewModel.videos.isEmpty
 
-        // Don't save if no text and no media
         guard !plainText.isEmpty || hasMedia else {
             return
         }
 
-        // Don't save if no date
-        guard let date = store.entryDate else {
+        guard let date = entryDate else {
             return
         }
 
-        if let entryID = store.selectedEntryID {
+        if let entryID = currentEntryID {
             let existingEntry = context.model(for: entryID) as? Entry
             if let existingEntry = existingEntry {
-                // Update existing entry
                 existingEntry.bodyText = plainText
                 existingEntry.date = date
             }
         } else {
-            // Create new entry
             let newEntry = Entry(bodyText: plainText, date: date, isFavorite: isNewEntryFavorite)
             context.insert(newEntry)
         }
 
-        // Save the context
         do {
             try context.save()
         } catch {
             print("Error saving entry: \(error)")
         }
     }
-    
+
     private func toggleFavorite() {
-        if let entryID = store.selectedEntryID,
+        if let entryID = currentEntryID,
            let existingEntry = context.model(for: entryID) as? Entry {
-            // Toggle favorite for existing entry
             existingEntry.isFavorite.toggle()
-            
-            // Save the context
+
             do {
                 try context.save()
             } catch {
                 print("Error toggling favorite: \(error)")
             }
         } else {
-            // Toggle favorite state for new entry
             isNewEntryFavorite.toggle()
         }
     }
-    
+
     private func isFavoriteEntry() -> Bool {
-        if let entryID = store.selectedEntryID,
+        if let entryID = currentEntryID,
            let existingEntry = context.model(for: entryID) as? Entry {
-            // Return favorite status of existing entry
             return existingEntry.isFavorite
         } else {
-            // Return favorite state for new entry
             return isNewEntryFavorite
         }
     }
@@ -586,7 +620,7 @@ struct DatePickerSheet: View {
     let datesWithEntries: Set<Date>
     let onDone: () -> Void
     let onAppear: () -> Void
-    
+
     var body: some View {
         VStack {
             CalendarView(
@@ -594,7 +628,7 @@ struct DatePickerSheet: View {
                 datesWithEntries: datesWithEntries
             )
             .padding()
-            
+
             Spacer()
             HStack {
                 Button("Done") {
@@ -616,13 +650,12 @@ struct CalendarView: View {
     @Binding var selectedDate: Date
     let datesWithEntries: Set<Date>
     @State private var displayedMonth: Date = Date()
-    
+
     private let calendar = Calendar.current
     private let daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    
+
     var body: some View {
         VStack {
-            // Month navigation
             HStack {
                 Button(action: { changeMonth(by: -1) }) {
                     Image(systemName: "chevron.left")
@@ -638,8 +671,7 @@ struct CalendarView: View {
                 }
             }
             .padding()
-            
-            // Days of week header
+
             HStack(spacing: 0) {
                 ForEach(daysOfWeek, id: \.self) { day in
                     Text(day)
@@ -648,8 +680,7 @@ struct CalendarView: View {
                 }
             }
             .padding(.bottom, 8)
-            
-            // Calendar grid
+
             let days = getDaysInMonth()
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
                 ForEach(days, id: \.self) { date in
@@ -671,28 +702,27 @@ struct CalendarView: View {
             }
         }
     }
-    
+
     private func changeMonth(by value: Int) {
         if let newMonth = calendar.date(byAdding: .month, value: value, to: displayedMonth) {
             displayedMonth = newMonth
         }
     }
-    
+
     private func getDaysInMonth() -> [Date?] {
         guard let monthInterval = calendar.dateInterval(of: .month, for: displayedMonth),
               let monthFirstWeek = calendar.dateInterval(of: .weekOfMonth, for: monthInterval.start) else {
             return []
         }
-        
+
         var days: [Date?] = []
         var currentDate = monthFirstWeek.start
-        
-        // Generate 6 weeks worth of dates (42 days)
+
         for _ in 0..<42 {
             days.append(currentDate)
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
         }
-        
+
         return days
     }
 }
@@ -702,7 +732,7 @@ struct DayCell: View {
     let isSelected: Bool
     let hasEntry: Bool
     let isCurrentMonth: Bool
-    
+
     var body: some View {
         VStack(spacing: 2) {
             Text("\(Calendar.current.component(.day, from: date))")
@@ -711,7 +741,7 @@ struct DayCell: View {
                 .background(isSelected ? Color.blue : Color.clear)
                 .foregroundColor(isSelected ? .white : (isCurrentMonth ? .primary : .gray))
                 .clipShape(Circle())
-            
+
             if hasEntry {
                 Circle()
                     .fill(Color.blue)
@@ -722,4 +752,3 @@ struct DayCell: View {
         }
     }
 }
-

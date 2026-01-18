@@ -2,16 +2,18 @@ import SwiftUI
 import SwiftData
 
 struct EntryList: View {
-    
+
     @Query(sort: \Entry.date, order: .reverse) private var entries: [Entry]
     @Environment(\.modelContext) private var context
-    @State private var store = EntryStore()
     @State private var selection = Set<PersistentIdentifier>()
     @State private var editMode: EditMode = .inactive
     @State private var searchText = ""
     @State private var showWelcomeSheet = false
     @State private var isWelcomeSheetDismissed = false
     @State private var showFavoritesOnly = false
+
+    // Editor presentation state - using wrapper for fullScreenCover(item:)
+    @State private var editorPresentation: EditorPresentation?
     
     // Glass button style with fallback for iOS < 26
     private var glassButtonStyle: some PrimitiveButtonStyle {
@@ -228,7 +230,7 @@ struct EntryList: View {
         .simultaneousGesture(
             TapGesture().onEnded {
                 if editMode == .inactive {
-                    store.showEditor(for: entry.persistentModelID, context: context)
+                    editorPresentation = EditorPresentation(entryID: entry.persistentModelID)
                 } else {
                     if selection.contains(entry.persistentModelID) {
                         selection.remove(entry.persistentModelID)
@@ -349,7 +351,7 @@ struct EntryList: View {
             HStack {
                 Spacer()
                 Button(action: {
-                    store.showEditor(context: context)
+                    editorPresentation = EditorPresentation(entryID: nil)
                 }) {
                     ZStack {
                         Circle()
@@ -388,9 +390,8 @@ struct EntryList: View {
                 floatingAddButton
             }
             .navigationTitle("Entries")
-            .fullScreenCover(isPresented: $store.isShowingEditor) {
-                EntryEditor()
-                    .environment(store)
+            .fullScreenCover(item: $editorPresentation) { presentation in
+                EntryEditor(initialEntryID: presentation.entryID)
             }
             .sheet(isPresented: $showWelcomeSheet) {
                 WelcomeView(isWelcomeSheetDismissed: $isWelcomeSheetDismissed)
@@ -506,6 +507,12 @@ struct WelcomeView: View {
             }
         }
     }
+}
+
+// MARK: - Editor Presentation Wrapper
+struct EditorPresentation: Identifiable {
+    let id = UUID()
+    let entryID: PersistentIdentifier?
 }
 
 // MARK: - Button Style Wrapper
