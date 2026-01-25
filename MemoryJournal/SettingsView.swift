@@ -1,9 +1,24 @@
 import SwiftUI
+import SwiftData
 import StoreKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Entry.date, order: .reverse) private var entries: [Entry]
+
     private var subscriptionManager = SubscriptionManager.shared
     @State private var showPaywall = false
+    @State private var showExportSelection = false
+    @State private var showImportPicker = false
+    @State private var isExportingAll = false
+    @State private var isImporting = false
+    @State private var showShareSheet = false
+    @State private var exportedFileURL: URL?
+    @State private var showImportResult = false
+    @State private var importResultMessage = ""
+    @State private var showError = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationStack {
@@ -103,6 +118,13 @@ struct SettingsView: View {
                             title: "Year Highlights",
                             description: "Annual memory collections"
                         )
+
+                        FeatureRow(
+                            icon: "square.and.arrow.up",
+                            color: .teal,
+                            title: "Export Entries",
+                            description: "Backup and share your journal"
+                        )
                     }
                 }
                     
@@ -125,6 +147,71 @@ struct SettingsView: View {
                     Text("Subscription")
                 }
                 
+                // Import/Export Section
+                Section {
+                    Button {
+                        if subscriptionManager.isPremium {
+                            exportAllEntries()
+                        } else {
+                            showPaywall = true
+                        }
+                    } label: {
+                        HStack {
+                            Label("Export All Entries", systemImage: "square.and.arrow.up")
+                            Spacer()
+                            if isExportingAll {
+                                ProgressView()
+                            } else if !subscriptionManager.isPremium {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("\(entries.count)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(entries.isEmpty || isExportingAll)
+
+                    Button {
+                        if subscriptionManager.isPremium {
+                            showExportSelection = true
+                        } else {
+                            showPaywall = true
+                        }
+                    } label: {
+                        HStack {
+                            Label("Select Entries to Export", systemImage: "checklist")
+                            Spacer()
+                            if !subscriptionManager.isPremium {
+                                Image(systemName: "lock.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .disabled(entries.isEmpty)
+
+                    Button {
+                        showImportPicker = true
+                    } label: {
+                        HStack {
+                            Label("Import Entries", systemImage: "square.and.arrow.down")
+                            Spacer()
+                            if isImporting {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isImporting)
+                } header: {
+                    Text("Import & Export")
+                } footer: {
+                    Text(subscriptionManager.isPremium
+                         ? "Export creates a JSON file with all entry data and media. Import will skip duplicate entries."
+                         : "Export requires Premium. Import is free to restore your data on a new device.")
+                }
+
                 // App Information
                 Section {
                     Link(destination: URL(string: "https://natanbiley.github.io/MemoryJournal/")!) {
@@ -135,7 +222,7 @@ struct SettingsView: View {
                                 .font(.caption)
                         }
                     }
-                    
+
                 } header: {
                     Text("About")
                 }
@@ -144,6 +231,86 @@ struct SettingsView: View {
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }
+            .sheet(isPresented: $showExportSelection) {
+                EntryExportSelectionView()
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let url = exportedFileURL {
+                    ShareSheet(activityItems: [url])
+                }
+            }
+            .fileImporter(
+                isPresented: $showImportPicker,
+                allowedContentTypes: [UTType.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result)
+            }
+            .alert("Import Complete", isPresented: $showImportResult) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importResultMessage)
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
+            }
+        }
+    }
+
+    // MARK: - Export/Import Functions
+
+    private func exportAllEntries() {
+        isExportingAll = true
+
+        Task {
+            do {
+                let url = try await ExportImportService.shared.exportEntries(entries)
+                exportedFileURL = url
+                isExportingAll = false
+                showShareSheet = true
+            } catch {
+                isExportingAll = false
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            guard url.startAccessingSecurityScopedResource() else {
+                errorMessage = "Unable to access the selected file."
+                showError = true
+                return
+            }
+
+            isImporting = true
+
+            Task {
+                defer {
+                    url.stopAccessingSecurityScopedResource()
+                }
+
+                do {
+                    let importResult = try await ExportImportService.shared.importEntries(from: url, context: modelContext)
+                    isImporting = false
+                    importResultMessage = importResult.message
+                    showImportResult = true
+                } catch {
+                    isImporting = false
+                    errorMessage = "Import failed: \(error.localizedDescription)"
+                    showError = true
+                }
+            }
+
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+            showError = true
         }
     }
 }
