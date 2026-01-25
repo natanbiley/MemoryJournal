@@ -117,7 +117,10 @@ struct ReviewView: View {
     }
     
     private func contentScore(for entry: Entry) -> Int {
-        return entry.bodyText.count
+        let textScore = entry.bodyText.count
+        let photoScore = entry.photos.count * 25
+        let videoScore = entry.videos.count * 50
+        return textScore + photoScore + videoScore
     }
     
     private var previousMonthName: String {

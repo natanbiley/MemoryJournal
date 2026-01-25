@@ -181,11 +181,11 @@ class SubscriptionManager {
     // MARK: - Media Limits
 
     var photoLimit: Int {
-        isPremium ? 10 : 2
+        isPremium ? Int.max : 2
     }
 
     var videoLimit: Int {
-        isPremium ? 5 : 0
+        isPremium ? Int.max : 0
     }
 
     func canAddPhotos(currentCount: Int) -> Bool {
