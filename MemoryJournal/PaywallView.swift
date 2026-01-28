@@ -67,6 +67,13 @@ struct PaywallView: View {
                         )
                         
                         PaywallFeatureRow(
+                            icon: "square.and.arrow.up.fill",
+                            color: .teal,
+                            title: "Export Journals",
+                            description: "Backup your entries"
+                        )
+
+                        PaywallFeatureRow(
                             icon: "lock.shield.fill",
                             color: .blue,
                             title: "Privacy First",
@@ -89,11 +96,6 @@ struct PaywallView: View {
                             Text("Unable to load subscription options")
                                 .font(.headline)
                                 .foregroundStyle(.secondary)
-                            
-                            Text("Make sure StoreKit Configuration is enabled in your Xcode scheme")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .multilineTextAlignment(.center)
                             
                             Button {
                                 Task {

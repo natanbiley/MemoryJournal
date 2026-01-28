@@ -11,6 +11,8 @@ struct EntryList: View {
     @State private var showWelcomeSheet = false
     @State private var isWelcomeSheetDismissed = false
     @State private var showFavoritesOnly = false
+    @State private var showMonthPicker = false
+    @State private var scrollToMonth: String?
 
     // Editor presentation state - using wrapper for fullScreenCover(item:)
     @State private var editorPresentation: EditorPresentation?
@@ -242,7 +244,7 @@ struct EntryList: View {
         )
     }
     
-    private var mainListView: some View {
+    private func mainListView(scrollProxy: ScrollViewProxy) -> some View {
         List(selection: $selection) {
             ForEach(groupedEntries, id: \.0) { monthYear, monthEntries in
                 Section(header: Text(monthYear)
@@ -256,10 +258,19 @@ struct EntryList: View {
                     }
                 }
                 .listSectionSeparator(.hidden)
+                .id(monthYear)
             }
         }
         .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search entries")
+        .onChange(of: scrollToMonth) { _, newValue in
+            if let month = newValue {
+                withAnimation {
+                    scrollProxy.scrollTo(month, anchor: .top)
+                }
+                scrollToMonth = nil
+            }
+        }
     }
     
     @ToolbarContentBuilder
@@ -273,7 +284,7 @@ struct EntryList: View {
                         .font(.title3)
                 }
                 .buttonStyle(glassButtonStyle)
-                
+
                 Button(action: {
                     withAnimation {
                         showFavoritesOnly.toggle()
@@ -282,6 +293,14 @@ struct EntryList: View {
                     Image(systemName: showFavoritesOnly ? "heart.fill" : "heart")
                         .font(.title3)
                         .foregroundColor(showFavoritesOnly ? .red : .primary)
+                }
+                .buttonStyle(glassButtonStyle)
+
+                Button(action: {
+                    showMonthPicker = true
+                }) {
+                    Image(systemName: "calendar")
+                        .font(.title3)
                 }
                 .buttonStyle(glassButtonStyle)
             }
@@ -372,22 +391,24 @@ struct EntryList: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                if filteredEntries.isEmpty && searchText.isEmpty && !showFavoritesOnly {
-                    emptyStateView
-                } else if filteredEntries.isEmpty && !searchText.isEmpty {
-                    emptySearchView
-                } else if filteredEntries.isEmpty && showFavoritesOnly {
-                    emptyFavoritesView
+            ScrollViewReader { scrollProxy in
+                ZStack {
+                    if filteredEntries.isEmpty && searchText.isEmpty && !showFavoritesOnly {
+                        emptyStateView
+                    } else if filteredEntries.isEmpty && !searchText.isEmpty {
+                        emptySearchView
+                    } else if filteredEntries.isEmpty && showFavoritesOnly {
+                        emptyFavoritesView
+                    }
+
+                    mainListView(scrollProxy: scrollProxy)
+                        .toolbar { toolbarContent }
+                        .toolbarBackground(.hidden, for: .navigationBar)
+                        .toolbarBackground(.white, for: .navigationBar)
+                        .environment(\.editMode, $editMode)
+
+                    floatingAddButton
                 }
-
-                mainListView
-                    .toolbar { toolbarContent }
-                    .toolbarBackground(.hidden, for: .navigationBar)
-                    .toolbarBackground(.white, for: .navigationBar)
-                    .environment(\.editMode, $editMode)
-
-                floatingAddButton
             }
             .navigationTitle("Entries")
             .fullScreenCover(item: $editorPresentation) { presentation in
@@ -395,6 +416,12 @@ struct EntryList: View {
             }
             .sheet(isPresented: $showWelcomeSheet) {
                 WelcomeView(isWelcomeSheetDismissed: $isWelcomeSheetDismissed)
+            }
+            .sheet(isPresented: $showMonthPicker) {
+                MonthPickerView(
+                    availableMonths: groupedEntries.map { $0.0 },
+                    selectedMonth: $scrollToMonth
+                )
             }
             .onAppear {
                 if entries.isEmpty && searchText.isEmpty && !showFavoritesOnly && !isWelcomeSheetDismissed {
@@ -513,6 +540,117 @@ struct WelcomeView: View {
 struct EditorPresentation: Identifiable {
     let id = UUID()
     let entryID: PersistentIdentifier?
+}
+
+// MARK: - Month Picker View
+struct MonthPickerView: View {
+    let availableMonths: [String] // Format: "MMMM yyyy"
+    @Binding var selectedMonth: String?
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedMonthName: String = ""
+    @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
+
+    private var availableYears: [Int] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        let years = availableMonths.compactMap { formatter.date(from: $0) }
+            .map { Calendar.current.component(.year, from: $0) }
+        return Array(Set(years)).sorted(by: >)
+    }
+
+    private var monthsForSelectedYear: [String] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return availableMonths.filter { month in
+            if let date = formatter.date(from: month) {
+                return Calendar.current.component(.year, from: date) == selectedYear
+            }
+            return false
+        }.compactMap { month in
+            formatter.date(from: month).map {
+                Calendar.current.monthSymbols[Calendar.current.component(.month, from: $0) - 1]
+            }
+        }
+    }
+
+    private var isValidSelection: Bool {
+        monthsForSelectedYear.contains(selectedMonthName)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                if availableMonths.isEmpty {
+                    Text("No entries yet")
+                        .foregroundStyle(.secondary)
+                        .padding()
+                } else {
+                    HStack(spacing: 0) {
+                        Picker("Month", selection: $selectedMonthName) {
+                            ForEach(monthsForSelectedYear, id: \.self) { month in
+                                Text(month).tag(month)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(maxWidth: .infinity)
+                        .clipped()
+
+                        Picker("Year", selection: $selectedYear) {
+                            ForEach(availableYears, id: \.self) { year in
+                                Text(String(year)).tag(year)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(width: 100)
+                        .clipped()
+                    }
+                    .padding(.horizontal)
+                }
+
+                Spacer()
+            }
+            .navigationTitle("Jump to Month")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Go") {
+                        selectedMonth = "\(selectedMonthName) \(selectedYear)"
+                        dismiss()
+                    }
+                    .foregroundStyle(.blue)
+                    .disabled(!isValidSelection)
+                }
+            }
+            .onAppear {
+                initializeSelection()
+            }
+            .onChange(of: selectedYear) { _, _ in
+                // Auto-select first available month when year changes
+                if !monthsForSelectedYear.contains(selectedMonthName),
+                   let firstMonth = monthsForSelectedYear.first {
+                    selectedMonthName = firstMonth
+                }
+            }
+        }
+        .presentationDetents([.height(280)])
+    }
+
+    private func initializeSelection() {
+        if let first = availableMonths.first {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMMM yyyy"
+            if let date = formatter.date(from: first) {
+                selectedMonthName = Calendar.current.monthSymbols[Calendar.current.component(.month, from: date) - 1]
+                selectedYear = Calendar.current.component(.year, from: date)
+            }
+        }
+    }
 }
 
 // MARK: - Button Style Wrapper
