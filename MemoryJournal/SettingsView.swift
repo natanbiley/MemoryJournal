@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Query(sort: \Entry.date, order: .reverse) private var entries: [Entry]
 
     private var subscriptionManager = SubscriptionManager.shared
+    @State private var reminderManager = ReminderManager.shared
     @State private var showPaywall = false
     @State private var showExportSelection = false
     @State private var showImportPicker = false
@@ -146,7 +147,51 @@ struct SettingsView: View {
                 } header: {
                     Text("Subscription")
                 }
-                
+
+                // Reminders Section
+                Section {
+                    Toggle("Daily Reminder", isOn: Binding(
+                        get: { reminderManager.isEnabled },
+                        set: { newValue in
+                            if newValue {
+                                Task {
+                                    let status = await reminderManager.checkPermissionStatus()
+                                    if status == .notDetermined {
+                                        let granted = await reminderManager.requestPermission()
+                                        if granted {
+                                            reminderManager.isEnabled = true
+                                        }
+                                    } else if status == .authorized {
+                                        reminderManager.isEnabled = true
+                                    } else {
+                                        // Permission denied - open settings
+                                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                                            await UIApplication.shared.open(url)
+                                        }
+                                    }
+                                }
+                            } else {
+                                reminderManager.isEnabled = false
+                            }
+                        }
+                    ))
+
+                    if reminderManager.isEnabled {
+                        DatePicker(
+                            "Reminder Time",
+                            selection: Binding(
+                                get: { reminderManager.reminderTime },
+                                set: { reminderManager.reminderTime = $0 }
+                            ),
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+                } header: {
+                    Text("Reminders")
+                } footer: {
+                    Text("Get a daily notification to remind you to journal.")
+                }
+
                 // Import/Export Section
                 Section {
                     Button {
