@@ -439,7 +439,9 @@ struct EntryList: View {
 struct WelcomeView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var isWelcomeSheetDismissed: Bool
-    
+
+    @State private var reminderManager = ReminderManager.shared
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -447,27 +449,6 @@ struct WelcomeView: View {
                     Spacer()
                     // App Icon and Title
                     VStack(spacing: 16) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [.blue.opacity(0.2), .purple.opacity(0.2)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 140, height: 140)
-                            
-                            Image(systemName: "book.closed.fill")
-                                .font(.system(size: 70))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [.blue, .purple]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
                         Text("Welcome to DayScribe!")
                             .font(.largeTitle)
                             .fontWeight(.bold)
@@ -518,7 +499,46 @@ struct WelcomeView: View {
                         )
                     }
                     .padding(.horizontal, 20)
-                    
+
+                    // Daily Reminder Section
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Daily Reminders")
+                            .font(.headline)
+
+                        Toggle("Remind me to journal", isOn: Binding(
+                            get: { reminderManager.isEnabled },
+                            set: { newValue in
+                                if newValue {
+                                    Task {
+                                        let status = await reminderManager.checkPermissionStatus()
+                                        if status == .notDetermined {
+                                            let granted = await reminderManager.requestPermission()
+                                            if granted {
+                                                reminderManager.isEnabled = true
+                                            }
+                                        } else if status == .authorized {
+                                            reminderManager.isEnabled = true
+                                        }
+                                    }
+                                } else {
+                                    reminderManager.isEnabled = false
+                                }
+                            }
+                        ))
+
+                        if reminderManager.isEnabled {
+                            DatePicker(
+                                "Reminder time",
+                                selection: $reminderManager.reminderTime,
+                                displayedComponents: .hourAndMinute
+                            )
+                        }
+                    }
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 20)
+
                     Spacer(minLength: 20)
                 }
             }
@@ -527,6 +547,7 @@ struct WelcomeView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
+                        reminderManager.hasSeenOnboarding = true
                         isWelcomeSheetDismissed = true
                         dismiss()
                     }
