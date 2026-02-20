@@ -275,43 +275,54 @@ struct EntryList: View {
     
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarLeading) {
-            HStack(spacing: 12) {
-                Button(action: {
-                    showWelcomeSheet = true
-                }) {
-                    Image(systemName: "info.circle")
-                        .font(.title3)
-                }
-                .buttonStyle(glassButtonStyle)
-
-                Button(action: {
-                    withAnimation {
-                        showFavoritesOnly.toggle()
+        if editMode == .inactive {
+            ToolbarItem(placement: .navigationBarLeading) {
+                HStack(spacing: 12) {
+                    Button(action: {
+                        showWelcomeSheet = true
+                    }) {
+                        Image(systemName: "info.circle")
+                            .font(.title3)
                     }
-                }) {
-                    Image(systemName: showFavoritesOnly ? "heart.fill" : "heart")
-                        .font(.title3)
-                        .foregroundColor(showFavoritesOnly ? .red : .primary)
-                }
-                .buttonStyle(glassButtonStyle)
+                    .buttonStyle(glassButtonStyle)
 
-                Button(action: {
-                    showMonthPicker = true
-                }) {
-                    Image(systemName: "calendar")
-                        .font(.title3)
+                    Button(action: {
+                        withAnimation {
+                            showFavoritesOnly.toggle()
+                        }
+                    }) {
+                        Image(systemName: showFavoritesOnly ? "heart.fill" : "heart")
+                            .font(.title3)
+                            .foregroundColor(showFavoritesOnly ? .red : .primary)
+                    }
+                    .buttonStyle(glassButtonStyle)
+
+                    Button(action: {
+                        showMonthPicker = true
+                    }) {
+                        Image(systemName: "calendar")
+                            .font(.title3)
+                    }
+                    .buttonStyle(glassButtonStyle)
                 }
-                .buttonStyle(glassButtonStyle)
             }
         }
         
         if editMode == .active && !selection.isEmpty {
             ToolbarItem {
                 Button {
+                    // Check if all selected entries are favorited
+                    let allFavorited = selection.allSatisfy { entryID in
+                        if let entry = context.model(for: entryID) as? Entry {
+                            return entry.isFavorite
+                        }
+                        return false
+                    }
+                    
+                    // If all are favorited, unfavorite all; otherwise, favorite all
                     for entryID in selection {
                         if let entry = context.model(for: entryID) as? Entry {
-                            entry.isFavorite.toggle()
+                            entry.isFavorite = !allFavorited
                         }
                     }
                     do {
@@ -360,6 +371,7 @@ struct EntryList: View {
                 }
             }) {
                 Text(editMode == .inactive ? "Edit" : "Done")
+                    .foregroundColor(editMode == .active ? .blue : .primary)
             }
         }
     }

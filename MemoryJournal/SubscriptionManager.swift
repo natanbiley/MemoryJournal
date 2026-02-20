@@ -25,6 +25,7 @@ class SubscriptionManager {
         #if DEBUG
         // Skip StoreKit initialization in previews
         if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+            isPremium = true // Assume premium for previews
             return
         }
         #endif
